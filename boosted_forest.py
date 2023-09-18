@@ -11,9 +11,25 @@ from scipy.sparse import csc_matrix, csr_matrix, issparse
 from scipy.sparse import hstack
 from sklearn.ensemble._gradient_boosting import _random_sample_mask
 from sklearn.tree._tree import DOUBLE, DTYPE
-from _boosted_cascade import predict_stages, predict_stage
+from sklearn.utils.multiclass import check_classification_targets
+from sklearn.utils._param_validation import HasMethods, Interval, StrOptions
+from sklearn.exceptions import NotFittedError
+from sklearn.base import ClassifierMixin, RegressorMixin
+
 from kfoldwrapper import KFoldWrapper
 from sklearn.ensemble import RandomForestRegressor
+from numbers import Integral, Real
+from sklearn.preprocessing import LabelEncoder
+from sklearn._loss.loss import (
+    _LOSSES,
+    AbsoluteError,
+    ExponentialLoss,
+    HalfBinomialLoss,
+    HalfMultinomialLoss,
+    HalfSquaredError,
+    HuberLoss,
+    PinballLoss,
+)
 
 
 class BaseBoostedCascade(BaseGradientBoosting):
@@ -40,7 +56,8 @@ class BaseBoostedCascade(BaseGradientBoosting):
         n_iter_no_change=None,
         tol=1e-4,
         ccp_alpha=0.0,
-        C=1.0):
+        C=1.0,
+        n_splits=3):
         super().__init__(loss = loss,
                          learning_rate = learning_rate,
                          n_estimators = n_estimators,
@@ -64,6 +81,7 @@ class BaseBoostedCascade(BaseGradientBoosting):
                          )
         self.n_layers = n_layers
         self.C = C
+        self.n_splits = n_splits
     
     def _fit_stages(
         self,
@@ -213,7 +231,6 @@ class BaseBoostedCascade(BaseGradientBoosting):
         
         estimator = RandomForestRegressor(
             criterion=self.criterion,
-            splitter="best",
             max_depth=self.max_depth,
             min_samples_split=self.min_samples_split,
             min_samples_leaf=self.min_samples_leaf,
@@ -240,20 +257,17 @@ class BaseBoostedCascade(BaseGradientBoosting):
                 sample_weight = sample_weight * sample_mask.astype(np.float64)
 
             self.estimators_[i, k] = []
-            for _, estimator in enumerate(self.n_estimators):
+            for _  in range(self.n_estimators):
                 kfold_estimator = KFoldWrapper(
                     estimator,
                     self.n_splits,
-                    self.n_outputs,
                     self.C,
                     self.random_state,
-                    self.verbose,
-                    self.is_classifier, 
-                    self.parallel
+                    self.verbose
                 )
     
                 X = X_csr if X_csr is not None else X
-                kfold_estimator.fit(X, residual, sample_weight)
+                kfold_estimator.fit(X, residual, raw_predictions, k, sample_weight)
                 
                 
                 kfold_estimator.update_terminal_regions(X, y, raw_predictions, k)
@@ -269,29 +283,6 @@ class BaseBoostedCascade(BaseGradientBoosting):
         return raw_predictions
 
     def _staged_raw_predict(self, X, check_input=True):
-        """Compute raw predictions of ``X`` for each iteration.
-
-        This method allows monitoring (i.e. determine error on testing set)
-        after each stage.
-
-        Parameters
-        ----------
-        X : {array-like, sparse matrix} of shape (n_samples, n_features)
-            The input samples. Internally, it will be converted to
-            ``dtype=np.float32`` and if a sparse matrix is provided
-            to a sparse ``csr_matrix``.
-
-        check_input : bool, default=True
-            If False, the input arrays X will not be checked.
-
-        Returns
-        -------
-        raw_predictions : generator of ndarray of shape (n_samples, k)
-            The raw predictions of the input samples. The order of the
-            classes corresponds to that in the attribute :term:`classes_`.
-            Regression and binary classification are special cases with
-            ``k == 1``, otherwise ``k==n_classes``.
-        """
         if check_input:
             X = self._validate_data(
                 X, dtype=DTYPE, order="C", accept_sparse="csr", reset=False
@@ -309,4 +300,249 @@ class BaseBoostedCascade(BaseGradientBoosting):
     def predict_stages(self, X, raw_predictions):
         for i in range(self.n_layers):
             self.predict_stage(i, X, raw_predictions)
-                        
+ 
+class CascadeBoostingClassifier(ClassifierMixin, BaseBoostedCascade):
+    _parameter_constraints: dict = {
+        **BaseBoostedCascade._parameter_constraints,
+        "loss": [StrOptions({"log_loss", "exponential"})],
+        "init": [StrOptions({"zero"}), None, HasMethods(["fit", "predict_proba"])],
+    }
+
+    def __init__(
+        self,
+        *,
+        loss="log_loss",
+        learning_rate=0.1,
+        n_estimators=2,
+        n_layers=3,
+        subsample=1.0,
+        criterion="friedman_mse",
+        min_samples_split=2,
+        min_samples_leaf=1,
+        min_weight_fraction_leaf=0.0,
+        max_depth=3,
+        min_impurity_decrease=0.0,
+        init=None,
+        random_state=None,
+        max_features=None,
+        verbose=0,
+        max_leaf_nodes=None,
+        warm_start=False,
+        validation_fraction=0.1,
+        n_iter_no_change=None,
+        tol=1e-4,
+        ccp_alpha=0.0,
+    ):
+        super().__init__(
+            loss=loss,
+            learning_rate=learning_rate,
+            n_layers=n_layers,
+            n_estimators=n_estimators,
+            criterion=criterion,
+            min_samples_split=min_samples_split,
+            min_samples_leaf=min_samples_leaf,
+            min_weight_fraction_leaf=min_weight_fraction_leaf,
+            max_depth=max_depth,
+            init=init,
+            subsample=subsample,
+            max_features=max_features,
+            random_state=random_state,
+            verbose=verbose,
+            max_leaf_nodes=max_leaf_nodes,
+            min_impurity_decrease=min_impurity_decrease,
+            warm_start=warm_start,
+            validation_fraction=validation_fraction,
+            n_iter_no_change=n_iter_no_change,
+            tol=tol,
+            ccp_alpha=ccp_alpha,
+        )
+
+    def _encode_y(self, y, sample_weight):
+        # encode classes into 0 ... n_classes - 1 and sets attributes classes_
+        # and n_trees_per_iteration_
+        check_classification_targets(y)
+
+        label_encoder = LabelEncoder()
+        encoded_y_int = label_encoder.fit_transform(y)
+        self.classes_ = label_encoder.classes_
+        n_classes = self.classes_.shape[0]
+        # only 1 tree for binary classification. For multiclass classification,
+        # we build 1 tree per class.
+        self.n_trees_per_iteration_ = 1 if n_classes <= 2 else n_classes
+        encoded_y = encoded_y_int.astype(float, copy=False)
+
+        # From here on, it is additional to the HGBT case.
+        # expose n_classes_ attribute
+        self.n_classes_ = n_classes
+        if sample_weight is None:
+            n_trim_classes = n_classes
+        else:
+            n_trim_classes = np.count_nonzero(np.bincount(encoded_y_int, sample_weight))
+
+        if n_trim_classes < 2:
+            raise ValueError(
+                "y contains %d class after sample_weight "
+                "trimmed classes with zero weights, while a "
+                "minimum of 2 classes are required." % n_trim_classes
+            )
+        return encoded_y
+    
+    def _get_loss(self, sample_weight):
+        if self.loss == "log_loss":
+            if self.n_classes_ == 2:
+                return HalfBinomialLoss(sample_weight=sample_weight)
+            else:
+                return HalfMultinomialLoss(
+                    sample_weight=sample_weight, n_classes=self.n_classes_
+                )
+        elif self.loss == "exponential":
+            if self.n_classes_ > 2:
+                raise ValueError(
+                    f"loss='{self.loss}' is only suitable for a binary classification "
+                    f"problem, you have n_classes={self.n_classes_}. "
+                    "Please use loss='log_loss' instead."
+                )
+            else:
+                return ExponentialLoss(sample_weight=sample_weight) 
+            
+    def _validate_y(self, y, sample_weight):
+        check_classification_targets(y)
+        self.classes_, y = np.unique(y, return_inverse=True)
+        n_trim_classes = np.count_nonzero(np.bincount(y, sample_weight))
+        if n_trim_classes < 2:
+            raise ValueError(
+                "y contains %d class after sample_weight "
+                "trimmed classes with zero weights, while a "
+                "minimum of 2 classes are required." % n_trim_classes
+            )
+        self._n_classes = len(self.classes_)
+        # expose n_classes_ attribute
+        self.n_classes_ = self._n_classes
+        return y
+
+    def decision_function(self, X):
+        X = self._validate_data(
+            X, dtype=DTYPE, order="C", accept_sparse="csr", reset=False
+        )
+        raw_predictions = self._raw_predict(X)
+        if raw_predictions.shape[1] == 1:
+            return raw_predictions.ravel()
+        return raw_predictions
+
+    def staged_decision_function(self, X):
+        yield from self._staged_raw_predict(X)
+
+    def predict(self, X):
+        raw_predictions = self.decision_function(X)
+        encoded_labels = self._loss._raw_prediction_to_decision(raw_predictions)
+        return self.classes_.take(encoded_labels, axis=0)
+
+    def staged_predict(self, X):
+        for raw_predictions in self._staged_raw_predict(X):
+            encoded_labels = self._loss._raw_prediction_to_decision(raw_predictions)
+            yield self.classes_.take(encoded_labels, axis=0)
+
+    def predict_proba(self, X):
+        raw_predictions = self.decision_function(X)
+        try:
+            return self._loss._raw_prediction_to_proba(raw_predictions)
+        except NotFittedError:
+            raise
+        except AttributeError as e:
+            raise AttributeError(
+                "loss=%r does not support predict_proba" % self.loss
+            ) from e
+
+    def predict_log_proba(self, X):
+        proba = self.predict_proba(X)
+        return np.log(proba)
+
+    def staged_predict_proba(self, X):
+        try:
+            for raw_predictions in self._staged_raw_predict(X):
+                yield self._loss._raw_prediction_to_proba(raw_predictions)
+        except NotFittedError:
+            raise
+        except AttributeError as e:
+            raise AttributeError(
+                "loss=%r does not support predict_proba" % self.loss
+            ) from e
+
+
+class CascadeBoostingRegressor(RegressorMixin, BaseBoostedCascade):
+    _parameter_constraints: dict = {
+        **BaseBoostedCascade._parameter_constraints,
+        "loss": [StrOptions({"squared_error", "absolute_error", "huber", "quantile"})],
+        "init": [StrOptions({"zero"}), None, HasMethods(["fit", "predict"])],
+        "alpha": [Interval(Real, 0.0, 1.0, closed="neither")],
+    }
+
+    def __init__(
+        self,
+        *,
+        loss="squared_error",
+        learning_rate=0.1,
+        n_estimators=100,
+        subsample=1.0,
+        criterion="friedman_mse",
+        min_samples_split=2,
+        min_samples_leaf=1,
+        min_weight_fraction_leaf=0.0,
+        max_depth=3,
+        min_impurity_decrease=0.0,
+        init=None,
+        random_state=None,
+        max_features=None,
+        alpha=0.9,
+        verbose=0,
+        max_leaf_nodes=None,
+        warm_start=False,
+        validation_fraction=0.1,
+        n_iter_no_change=None,
+        tol=1e-4,
+        ccp_alpha=0.0,
+    ):
+        super().__init__(
+            loss=loss,
+            learning_rate=learning_rate,
+            n_estimators=n_estimators,
+            criterion=criterion,
+            min_samples_split=min_samples_split,
+            min_samples_leaf=min_samples_leaf,
+            min_weight_fraction_leaf=min_weight_fraction_leaf,
+            max_depth=max_depth,
+            init=init,
+            subsample=subsample,
+            max_features=max_features,
+            min_impurity_decrease=min_impurity_decrease,
+            random_state=random_state,
+            alpha=alpha,
+            verbose=verbose,
+            max_leaf_nodes=max_leaf_nodes,
+            warm_start=warm_start,
+            validation_fraction=validation_fraction,
+            n_iter_no_change=n_iter_no_change,
+            tol=tol,
+            ccp_alpha=ccp_alpha,
+        )
+
+    def _validate_y(self, y, sample_weight=None):
+        if y.dtype.kind == "O":
+            y = y.astype(DOUBLE)
+        return y
+
+    def predict(self, X):
+        X = self._validate_data(
+            X, dtype=DTYPE, order="C", accept_sparse="csr", reset=False
+        )
+        # In regression we can directly return the raw value from the trees.
+        return self._raw_predict(X).ravel()
+
+    def staged_predict(self, X):
+        for raw_predictions in self._staged_raw_predict(X):
+            yield raw_predictions.ravel()
+
+    def apply(self, X):
+        leaves = super().apply(X)
+        leaves = leaves.reshape(X.shape[0], self.estimators_.shape[0])
+        return leaves                       
