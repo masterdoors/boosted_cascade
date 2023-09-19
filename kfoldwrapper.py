@@ -78,7 +78,18 @@ class KFoldWrapper(object):
                 estimator.fit(
                     X[train_idx], y[train_idx], sample_weight[train_idx]
                 )
-            self.estimators_.append(estimator)    
+            self.estimators_.append(estimator)  
+            
+    def getIndicators(self, estimator, X):
+        Is = []
+        idx = estimator.apply(X)
+        for i,clf in enumerate(estimator.estimators_):
+            I = np.zeros((X.shape[0], clf.tree_.node_count))
+            for j in range(X.shape[0]):
+                I[j,idx[j,i]] = 1.0    
+            Is.append(I)
+        return np.hstack(Is)            
+                    
 
     def update_terminal_regions(self,X, y,raw_predictions, k):
         preds = []
@@ -94,18 +105,18 @@ class KFoldWrapper(object):
                                     fit_intercept=False,
                                     solver='lbfgs',
                                     max_iter=100,
-                                    multi_class='multinomial', n_jobs=-1))            
+                                    multi_class='ovr', n_jobs=-1))            
             
-            I = e.apply(X)
+            I = self.getIndicators(e, X)
       
             self.lr[i].fit(I, y_)
             preds.append(self.lr[i].decision_function(I))             
         raw_predictions[:,k] += np.asarray(preds).mean(axis=0)
-                
-
+    
     def predict(self, X):
         n_samples, _ = X.shape
-        out = np.zeros((n_samples, 1))  # pre-allocate results
+        out = np.zeros((n_samples, ))  # pre-allocate results
         for i, estimator in enumerate(self.estimators_):
-            out += self.lr[i].decision_function(estimator.apply(X))  # classification
+            I = self.getIndicators(estimator, X)
+            out += self.lr[i].decision_function(I)  # classification
         return out / self.n_splits  # return the average prediction

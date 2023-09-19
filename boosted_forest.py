@@ -6,6 +6,7 @@ Created on Sep 16, 2023
 
 from sklearn.ensemble._gb import BaseGradientBoosting
 from sklearn.ensemble._gb import VerboseReporter
+from sklearn.dummy import DummyClassifier, DummyRegressor
 import numpy as np
 from scipy.sparse import csc_matrix, csr_matrix, issparse
 from scipy.sparse import hstack
@@ -14,7 +15,7 @@ from sklearn.tree._tree import DOUBLE, DTYPE
 from sklearn.utils.multiclass import check_classification_targets
 from sklearn.utils._param_validation import HasMethods, Interval, StrOptions
 from sklearn.exceptions import NotFittedError
-from sklearn.base import ClassifierMixin, RegressorMixin
+from sklearn.base import ClassifierMixin, RegressorMixin, is_classifier
 
 from kfoldwrapper import KFoldWrapper
 from sklearn.ensemble import RandomForestRegressor
@@ -31,6 +32,47 @@ from sklearn._loss.loss import (
     PinballLoss,
 )
 
+
+def _init_raw_predictions(X, estimator, loss, use_predict_proba):
+    """Return the initial raw predictions.
+
+    Parameters
+    ----------
+    X : ndarray of shape (n_samples, n_features)
+        The data array.
+    estimator : object
+        The estimator to use to compute the predictions.
+    loss : BaseLoss
+        An instace of a loss function class.
+    use_predict_proba : bool
+        Whether estimator.predict_proba is used instead of estimator.predict.
+
+    Returns
+    -------
+    raw_predictions : ndarray of shape (n_samples, K)
+        The initial raw predictions. K is equal to 1 for binary
+        classification and regression, and equal to the number of classes
+        for multiclass classification. ``raw_predictions`` is casted
+        into float64.
+    """
+    # TODO: Use loss.fit_intercept_only where appropriate instead of
+    # DummyRegressor which is the default given by the `init` parameter,
+    # see also _init_state.
+    if use_predict_proba:
+        # Our parameter validation, set via _fit_context and _parameter_constraints
+        # already guarantees that estimator has a predict_proba method.
+        predictions = estimator.predict_proba(X)
+        if not loss.is_multiclass:
+            predictions = predictions[:, 1]  # probability of positive class
+        eps = np.finfo(np.float32).eps  # FIXME: This is quite large!
+        predictions = np.clip(predictions, eps, 1 - eps, dtype=np.float64)
+    else:
+        predictions = estimator.predict(X).astype(np.float64)
+
+    if predictions.ndim == 1:
+        return loss.link.link(predictions).reshape(-1, 1)
+    else:
+        return loss.link.link(predictions)
 
 class BaseBoostedCascade(BaseGradientBoosting):
     def __init__(self,
@@ -60,7 +102,7 @@ class BaseBoostedCascade(BaseGradientBoosting):
         n_splits=3):
         super().__init__(loss = loss,
                          learning_rate = learning_rate,
-                         n_estimators = n_estimators,
+                         n_estimators = n_layers,
                          subsample = subsample,
                          criterion = criterion,
                          min_samples_split = min_samples_split,
@@ -80,8 +122,33 @@ class BaseBoostedCascade(BaseGradientBoosting):
                          ccp_alpha = ccp_alpha
                          )
         self.n_layers = n_layers
+        self.n_estimators = n_estimators
         self.C = C
         self.n_splits = n_splits
+        
+    def _init_state(self):
+        """Initialize model state and allocate model state data structures."""
+
+        self.init_ = self.init
+        if self.init_ is None:
+            if is_classifier(self):
+                self.init_ = DummyClassifier(strategy="prior")
+            elif isinstance(self._loss, (AbsoluteError, HuberLoss)):
+                self.init_ = DummyRegressor(strategy="quantile", quantile=0.5)
+            elif isinstance(self._loss, PinballLoss):
+                self.init_ = DummyRegressor(strategy="quantile", quantile=self.alpha)
+            else:
+                self.init_ = DummyRegressor(strategy="mean")
+
+        self.estimators_ = np.empty(
+            (self.n_layers, self.n_trees_per_iteration_), dtype=object
+        )
+        self.train_score_ = np.zeros((self.n_layers,), dtype=np.float64)
+        # do oob?
+        if self.subsample < 1.0:
+            self.oob_improvement_ = np.zeros((self.n_layers), dtype=np.float64)
+            self.oob_scores_ = np.zeros((self.n_layers), dtype=np.float64)
+            self.oob_score_ = np.nan           
     
     def _fit_stages(
         self,
@@ -241,12 +308,12 @@ class BaseBoostedCascade(BaseGradientBoosting):
             ccp_alpha=self.ccp_alpha,
         )  
         
-        for k in range(loss.K):
-            if loss.is_multi_class:
+        for k in range(loss.n_classes):
+            if loss.n_classes > 2:
                 y = np.array(original_y == k, dtype=np.float64)
 
-            residual = loss.negative_gradient(
-                y, raw_predictions_copy, k=k, sample_weight=sample_weight
+            residual = - loss.gradient(
+                y, raw_predictions_copy 
             )
 
             # induce regression forest on residuals
@@ -276,6 +343,20 @@ class BaseBoostedCascade(BaseGradientBoosting):
 
         return raw_predictions    
     
+    def _raw_predict_init(self, X):
+        """Check input and compute raw predictions of the init estimator."""
+        self._check_initialized()
+        X = self.estimators_[0, 0][0].estimator_[0]._validate_X_predict(X)
+        if self.init_ == "zero":
+            raw_predictions = np.zeros(
+                shape=(X.shape[0], self.n_trees_per_iteration_), dtype=np.float64
+            )
+        else:
+            raw_predictions = _init_raw_predictions(
+                X, self.init_, self._loss, is_classifier(self)
+            )
+        return raw_predictions    
+    
     def _raw_predict(self, X):
         """Return the sum of the trees raw predictions (+ init estimator)."""
         raw_predictions = self._raw_predict_init(X)
@@ -293,7 +374,7 @@ class BaseBoostedCascade(BaseGradientBoosting):
             yield raw_predictions.copy() 
             
     def predict_stage(self, i, X, raw_predictions):
-        for k in range(self._loss.K):
+        for k in range(self._loss.n_classes):
             for estimator in self.estimators_[i,k]:
                 raw_predictions[:,k] += estimator.predict(X)    
     
@@ -434,8 +515,13 @@ class CascadeBoostingClassifier(ClassifierMixin, BaseBoostedCascade):
 
     def predict(self, X):
         raw_predictions = self.decision_function(X)
-        encoded_labels = self._loss._raw_prediction_to_decision(raw_predictions)
-        return self.classes_.take(encoded_labels, axis=0)
+        if raw_predictions.ndim == 1:  # decision_function already squeezed it
+            encoded_classes = (raw_predictions >= 0).astype(int)
+        else:
+            encoded_classes = np.argmax(raw_predictions, axis=1)
+            
+        return self.classes_[encoded_classes]
+
 
     def staged_predict(self, X):
         for raw_predictions in self._staged_raw_predict(X):
@@ -530,7 +616,7 @@ class CascadeBoostingRegressor(RegressorMixin, BaseBoostedCascade):
         if y.dtype.kind == "O":
             y = y.astype(DOUBLE)
         return y
-
+    
     def predict(self, X):
         X = self._validate_data(
             X, dtype=DTYPE, order="C", accept_sparse="csr", reset=False

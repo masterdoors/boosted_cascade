@@ -162,7 +162,7 @@ class LinearModelLoss:
         
         bias = self.bias
         if not bias:
-            bias = np.zeros(weights.shape)
+            bias = np.zeros((X.shape[0],))
 
         if not self.base_loss.is_multiclass:
             raw_prediction = X @ weights + intercept + bias
