@@ -94,22 +94,19 @@ class KFoldWrapper(object):
     def update_terminal_regions(self,X, y,raw_predictions, k):
         preds = []
         self.lr = []
-        y_ = y.copy()
-        y_[y_ == 0] = -1
-        margin = y_ - raw_predictions[:,k]
-        y_[margin < 0] = -1
-        y_[margin >= 0] = 1  
-        
+
+        bias = raw_predictions[:,k]
+  
         for i,e in enumerate(self.estimators_):
             self.lr.append(LogisticRegression(C=self.C,
                                     fit_intercept=False,
                                     solver='lbfgs',
                                     max_iter=100,
-                                    multi_class='ovr', n_jobs=-1))            
+                                    multi_class='ovr', n_jobs=1))            
             
             I = self.getIndicators(e, X)
       
-            self.lr[i].fit(I, y_)
+            self.lr[i].fit(I, y, bias = bias)
             preds.append(self.lr[i].decision_function(I))             
         raw_predictions[:,k] += np.asarray(preds).mean(axis=0)
     

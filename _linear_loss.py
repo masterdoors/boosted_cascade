@@ -161,7 +161,7 @@ class LinearModelLoss:
         weights, intercept = self.weight_intercept(coef)
         
         bias = self.bias
-        if not bias:
+        if bias is None:
             bias = np.zeros((X.shape[0],))
 
         if not self.base_loss.is_multiclass:

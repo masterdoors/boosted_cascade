@@ -306,6 +306,7 @@ class BaseBoostedCascade(BaseGradientBoosting):
             max_features=self.max_features,
             max_leaf_nodes=self.max_leaf_nodes,
             ccp_alpha=self.ccp_alpha,
+            n_estimators=10
         )  
         
         for k in range(loss.n_classes):
