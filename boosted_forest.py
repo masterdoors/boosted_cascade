@@ -182,8 +182,6 @@ class BaseBoostedCascade(BaseGradientBoosting):
 
         X_csc = csc_matrix(X) if issparse(X) else None
         X_csr = csr_matrix(X) if issparse(X) else None
-        X_csc_aug = None
-        X_csr_aug = None
 
         if self.n_iter_no_change is not None:
             loss_history = np.full(self.n_iter_no_change, np.inf)
@@ -204,29 +202,17 @@ class BaseBoostedCascade(BaseGradientBoosting):
                         sample_weight[~sample_mask],
                     )
 
-            #if isinstance(X,np.ndarray):
-            #    X_aug = np.hstack([X,raw_predictions])
-            #else:
-            #    if isinstance(X,csc_matrix):
-            #        X_aug = hstack([X, csc_matrix(raw_predictions)])
-            #    else:
-            #        X_aug = hstack([X, csr_matrix(raw_predictions)])    
-                    
-            #if X_csc is not None:
-            #    X_csc_aug = hstack([X_csc, csc_matrix(raw_predictions)])
-            #    X_csr_aug = hstack([X_csr, csr_matrix(raw_predictions)])
-            
             # fit next stage of trees
             raw_predictions = self._fit_stage(
                 i,
-                X,#X_aug,
+                X,
                 y,
                 raw_predictions,
                 sample_weight,
                 sample_mask,
                 random_state,
-                X_csc,#X_csc_aug,
-                X_csr#X_csr_aug,
+                X_csc,
+                X_csr
             )
 
             # track loss
@@ -306,7 +292,7 @@ class BaseBoostedCascade(BaseGradientBoosting):
             max_features=self.max_features,
             max_leaf_nodes=self.max_leaf_nodes,
             ccp_alpha=self.ccp_alpha,
-            n_estimators=10
+            n_estimators=100
         )  
         
         for k in range(loss.n_classes):
@@ -314,17 +300,22 @@ class BaseBoostedCascade(BaseGradientBoosting):
                 y = np.array(original_y == k, dtype=np.float64)
 
             residual = - loss.gradient(
-                y, raw_predictions_copy 
+                y, raw_predictions_copy[:, k] 
             )
 
             # induce regression forest on residuals
-
-
             if self.subsample < 1.0:
                 # no inplace multiplication!
                 sample_weight = sample_weight * sample_mask.astype(np.float64)
 
             self.estimators_[i, k] = []
+            X = X_csr if X_csr is not None else X
+            
+            if isinstance(X,np.ndarray):
+                X_aug = np.hstack([X,raw_predictions[:,k].reshape(-1,1)])
+            else:
+                X_aug = hstack([X, csr_matrix(raw_predictions[:,k].reshape(-1,1))])               
+            
             for _  in range(self.n_estimators):
                 kfold_estimator = KFoldWrapper(
                     estimator,
@@ -334,20 +325,29 @@ class BaseBoostedCascade(BaseGradientBoosting):
                     self.verbose
                 )
     
-                X = X_csr if X_csr is not None else X
-                kfold_estimator.fit(X, residual, raw_predictions, k, sample_weight)
-                
-                
-                kfold_estimator.update_terminal_regions(X, y, raw_predictions, k)
-                # add tree to ensemble
+                kfold_estimator.fit(X_aug, residual, raw_predictions, k, sample_weight)
+                #kfold_estimator.update_terminal_regions(X_aug, y, raw_predictions, k)
                 self.estimators_[i, k].append(kfold_estimator)
+                
 
+                # add tree to ensemble
+                
         return raw_predictions    
     
     def _raw_predict_init(self, X):
         """Check input and compute raw predictions of the init estimator."""
         self._check_initialized()
-        X = self.estimators_[0, 0][0].estimator_[0]._validate_X_predict(X)
+        raw = np.zeros(
+             shape=(X.shape[0], 1), dtype=np.float64
+         )
+        
+        if isinstance(X,np.ndarray):
+            X_aug = np.hstack([X,raw])         
+        else:
+            X_aug = hstack([X,csr_matrix(raw)])  
+        
+        X = self.estimators_[0, 0][0].estimator_[0]._validate_X_predict(X_aug)
+        
         if self.init_ == "zero":
             raw_predictions = np.zeros(
                 shape=(X.shape[0], self.n_trees_per_iteration_), dtype=np.float64
@@ -375,9 +375,16 @@ class BaseBoostedCascade(BaseGradientBoosting):
             yield raw_predictions.copy() 
             
     def predict_stage(self, i, X, raw_predictions):
+        new_raw_predictions = np.zeros(raw_predictions.shape)
         for k in range(self._loss.n_classes):
             for estimator in self.estimators_[i,k]:
-                raw_predictions[:,k] += estimator.predict(X)    
+                if isinstance(X,np.ndarray):
+                    X_aug = np.hstack([X,raw_predictions[:,k].reshape(-1,1)])         
+                else:
+                    X_aug = hstack([X,csr_matrix(raw_predictions[:, k]).reshape(-1,1)])           
+                new_raw_predictions[:,k] += estimator.predict(X_aug)
+        raw_predictions += new_raw_predictions        
+                    
     
     def predict_stages(self, X, raw_predictions):
         for i in range(self.n_layers):

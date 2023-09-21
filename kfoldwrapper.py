@@ -59,14 +59,14 @@ class KFoldWrapper(object):
         """Return the list of internal estimators."""
         return self.estimators_
 
-    def fit(self, X, y, raw_predictions, k, sample_weight=None):
+    def fit(self, X, y, raw_predictions,k,sample_weight=None):
         splitter = KFold(
             n_splits=self.n_splits,
             shuffle=True,
             random_state=self.random_state,
         )
-        
-        for k, (train_idx, val_idx) in enumerate(splitter.split(X, y)):
+        self.lr = []
+        for i, (train_idx, val_idx) in enumerate(splitter.split(X, y)):
             estimator = copy.deepcopy(self.dummy_estimator_)
 
             # Fit on training samples
@@ -78,6 +78,8 @@ class KFoldWrapper(object):
                 estimator.fit(
                     X[train_idx], y[train_idx], sample_weight[train_idx]
                 )
+                
+            self.update_terminal_regions(estimator, X, y, raw_predictions, sample_weight,i, k, train_idx, val_idx)    
             self.estimators_.append(estimator)  
             
     def getIndicators(self, estimator, X):
@@ -91,24 +93,19 @@ class KFoldWrapper(object):
         return np.hstack(Is)            
                     
 
-    def update_terminal_regions(self,X, y,raw_predictions, k):
-        preds = []
-        self.lr = []
-
-        bias = raw_predictions[:,k]
+    def update_terminal_regions(self,e, X, y,raw_predictions, sample_weight, i, k, train_idx, val_idx):
+        bias = raw_predictions[train_idx,k]
+        self.lr.append(LogisticRegression(C=self.C,
+                                fit_intercept=False,
+                                solver='lbfgs',
+                                max_iter=100,
+                                multi_class='ovr', n_jobs=1))            
+        
+        I = self.getIndicators(e, X[train_idx])
   
-        for i,e in enumerate(self.estimators_):
-            self.lr.append(LogisticRegression(C=self.C,
-                                    fit_intercept=False,
-                                    solver='lbfgs',
-                                    max_iter=100,
-                                    multi_class='ovr', n_jobs=1))            
-            
-            I = self.getIndicators(e, X)
-      
-            self.lr[i].fit(I, y, bias = bias)
-            preds.append(self.lr[i].decision_function(I))             
-        raw_predictions[:,k] += np.asarray(preds).mean(axis=0)
+        self.lr[i].fit(I, y[train_idx], bias = bias, sample_weight = sample_weight[train_idx])
+        I = self.getIndicators(e, X[val_idx])
+        raw_predictions[val_idx,k] += self.lr[i].decision_function(I)
     
     def predict(self, X):
         n_samples, _ = X.shape

@@ -30,7 +30,7 @@ x_train, x_validate, Y_train, Y_validate = train_test_split(
     x, Y, test_size=0.5, shuffle=False
 )
 
-model = GradientBoostingClassifier(n_estimators=5)
+model = GradientBoostingClassifier(n_estimators=10)
 
 model.fit(x_train, Y_train)
 
@@ -41,7 +41,7 @@ print(
     f"{metrics.classification_report(Y_validate, Y_v)}\n"
 )
 
-model = CascadeBoostingClassifier(n_layers=5)
+model = CascadeBoostingClassifier(n_layers=10)
 
 model.fit(x_train, Y_train)
 
