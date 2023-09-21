@@ -294,14 +294,17 @@ class BaseBoostedCascade(BaseGradientBoosting):
             ccp_alpha=self.ccp_alpha,
             n_estimators=100
         )  
+
+        residual = - loss.gradient(
+            y, raw_predictions_copy 
+        )
+        
+        if len(residual.shape) == 1:
+            residual = residual.reshape(-1,1)
         
         for k in range(loss.n_classes):
             if loss.n_classes > 2:
                 y = np.array(original_y == k, dtype=np.float64)
-
-            residual = - loss.gradient(
-                y, raw_predictions_copy[:, k] 
-            )
 
             # induce regression forest on residuals
             if self.subsample < 1.0:
@@ -325,7 +328,7 @@ class BaseBoostedCascade(BaseGradientBoosting):
                     self.verbose
                 )
     
-                kfold_estimator.fit(X_aug, residual, raw_predictions, k, sample_weight)
+                kfold_estimator.fit(X_aug, residual[:, k], y, raw_predictions, k, sample_weight)
                 #kfold_estimator.update_terminal_regions(X_aug, y, raw_predictions, k)
                 self.estimators_[i, k].append(kfold_estimator)
                 

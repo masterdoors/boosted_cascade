@@ -59,7 +59,7 @@ class KFoldWrapper(object):
         """Return the list of internal estimators."""
         return self.estimators_
 
-    def fit(self, X, y, raw_predictions,k,sample_weight=None):
+    def fit(self, X, y, y_, raw_predictions,k,sample_weight=None):
         splitter = KFold(
             n_splits=self.n_splits,
             shuffle=True,
@@ -79,7 +79,7 @@ class KFoldWrapper(object):
                     X[train_idx], y[train_idx], sample_weight[train_idx]
                 )
                 
-            self.update_terminal_regions(estimator, X, y, raw_predictions, sample_weight,i, k, train_idx, val_idx)    
+            self.update_terminal_regions(estimator, X, y_, raw_predictions, sample_weight,i, k, train_idx, val_idx)    
             self.estimators_.append(estimator)  
             
     def getIndicators(self, estimator, X):
