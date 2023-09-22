@@ -21,6 +21,9 @@ from kfoldwrapper import KFoldWrapper
 from sklearn.ensemble import RandomForestRegressor
 from numbers import Integral, Real
 from sklearn.preprocessing import LabelEncoder
+
+from sklearn.metrics import  accuracy_score
+
 from sklearn._loss.loss import (
     _LOSSES,
     AbsoluteError,
@@ -214,7 +217,7 @@ class BaseBoostedCascade(BaseGradientBoosting):
                 X_csc,
                 X_csr
             )
-
+            
             # track loss
             if do_oob:
                 self.train_score_[i] = loss_(
@@ -236,6 +239,8 @@ class BaseBoostedCascade(BaseGradientBoosting):
 
             if self.verbose > 0:
                 verbose_reporter.update(i, self)
+                encoded_classes = np.argmax(raw_predictions, axis=1)
+                print("Acc: ",accuracy_score(encoded_classes,y)) 
 
             if monitor is not None:
                 early_stopping = monitor(i, self, locals())
@@ -255,7 +260,7 @@ class BaseBoostedCascade(BaseGradientBoosting):
                     loss_history[i % len(loss_history)] = validation_loss
                 else:
                     break
-
+        self.n_layers = i + 1
         return i + 1   
     
     def _fit_stage(
@@ -292,7 +297,7 @@ class BaseBoostedCascade(BaseGradientBoosting):
             max_features=self.max_features,
             max_leaf_nodes=self.max_leaf_nodes,
             ccp_alpha=self.ccp_alpha,
-            n_estimators=100
+            n_estimators=30
         )  
 
         residual = - loss.gradient(
@@ -302,6 +307,7 @@ class BaseBoostedCascade(BaseGradientBoosting):
         if len(residual.shape) == 1:
             residual = residual.reshape(-1,1)
         
+        rp_old = raw_predictions.copy() 
         for k in range(loss.n_classes):
             if loss.n_classes > 2:
                 y = np.array(original_y == k, dtype=np.float64)
@@ -324,11 +330,12 @@ class BaseBoostedCascade(BaseGradientBoosting):
                     estimator,
                     self.n_splits,
                     self.C,
+                    1. / self.n_estimators,
                     self.random_state,
                     self.verbose
                 )
-    
-                kfold_estimator.fit(X_aug, residual[:, k], y, raw_predictions, k, sample_weight)
+                 
+                kfold_estimator.fit(X_aug, residual[:, k], y, raw_predictions, rp_old, k, sample_weight)
                 #kfold_estimator.update_terminal_regions(X_aug, y, raw_predictions, k)
                 self.estimators_[i, k].append(kfold_estimator)
                 

@@ -41,10 +41,11 @@ class KFoldWrapper(object):
         estimator,
         n_splits,
         C=1.0,
+        factor = 0.5,
         random_state=None,
         verbose=1,
     ):
-
+     
         # Parameters were already validated by upstream methods
         self.dummy_estimator_ = estimator
         self.n_splits = n_splits
@@ -53,13 +54,14 @@ class KFoldWrapper(object):
         # Internal container
         self.estimators_ = []
         self.C = C
+        self.factor = factor 
 
     @property
     def estimator_(self):
         """Return the list of internal estimators."""
         return self.estimators_
 
-    def fit(self, X, y, y_, raw_predictions,k,sample_weight=None):
+    def fit(self, X, y, y_, raw_predictions,rp_old,k,sample_weight=None):
         splitter = KFold(
             n_splits=self.n_splits,
             shuffle=True,
@@ -79,7 +81,8 @@ class KFoldWrapper(object):
                     X[train_idx], y[train_idx], sample_weight[train_idx]
                 )
                 
-            self.update_terminal_regions(estimator, X, y_, raw_predictions, sample_weight,i, k, train_idx, val_idx)    
+            self.update_terminal_regions(estimator, X, y_, raw_predictions, rp_old,sample_weight,i, k, train_idx, val_idx) 
+            
             self.estimators_.append(estimator)  
             
     def getIndicators(self, estimator, X):
@@ -93,8 +96,8 @@ class KFoldWrapper(object):
         return np.hstack(Is)            
                     
 
-    def update_terminal_regions(self,e, X, y,raw_predictions, sample_weight, i, k, train_idx, val_idx):
-        bias = raw_predictions[train_idx,k]
+    def update_terminal_regions(self,e, X, y,raw_predictions, rp_old, sample_weight, i, k, train_idx, val_idx):
+        bias = rp_old[train_idx,k]
         self.lr.append(LogisticRegression(C=self.C,
                                 fit_intercept=False,
                                 solver='lbfgs',
@@ -105,7 +108,7 @@ class KFoldWrapper(object):
   
         self.lr[i].fit(I, y[train_idx], bias = bias, sample_weight = sample_weight[train_idx])
         I = self.getIndicators(e, X[val_idx])
-        raw_predictions[val_idx,k] += self.lr[i].decision_function(I)
+        raw_predictions[val_idx,k] += self.factor*self.lr[i].decision_function(I)
     
     def predict(self, X):
         n_samples, _ = X.shape
@@ -113,4 +116,4 @@ class KFoldWrapper(object):
         for i, estimator in enumerate(self.estimators_):
             I = self.getIndicators(estimator, X)
             out += self.lr[i].decision_function(I)  # classification
-        return out / self.n_splits  # return the average prediction
+        return self.factor * out / self.n_splits  # return the average prediction

@@ -30,9 +30,15 @@ x_train, x_validate, Y_train, Y_validate = train_test_split(
     x, Y, test_size=0.5, shuffle=False
 )
 
-model = GradientBoostingClassifier(n_estimators=20)
+def monitor(i, e, locals):
+    if i > 1 and e.train_score_[i] > e.train_score_[i - 1]:
+        return True
+    else: 
+        return False
 
-model.fit(x_train, Y_train)
+model = GradientBoostingClassifier(n_estimators=100, verbose=2)
+
+model.fit(x_train, Y_train, monitor = monitor)
 
 Y_v = model.predict(x_validate)
 
@@ -41,9 +47,9 @@ print(
     f"{metrics.classification_report(Y_validate, Y_v)}\n"
 )
 
-model = CascadeBoostingClassifier(n_layers=20)
+model = CascadeBoostingClassifier(n_layers=10, verbose=2)
 
-model.fit(x_train, Y_train)
+model.fit(x_train, Y_train, monitor = monitor)
 
 Y_v = model.predict(x_validate)
 
