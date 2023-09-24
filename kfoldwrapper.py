@@ -108,7 +108,7 @@ class KFoldWrapper(object):
   
         self.lr[i].fit(I, y[train_idx], bias = bias, sample_weight = sample_weight[train_idx])
         I = self.getIndicators(e, X[val_idx])
-        raw_predictions[val_idx,k] += self.factor*self.lr[i].decision_function(I)
+        raw_predictions[val_idx,k] += self.factor*self.lr[i].decision_function(I) 
     
     def predict(self, X):
         n_samples, _ = X.shape

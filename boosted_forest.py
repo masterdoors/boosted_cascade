@@ -23,6 +23,10 @@ from numbers import Integral, Real
 from sklearn.preprocessing import LabelEncoder
 
 from sklearn.metrics import  accuracy_score
+import time
+
+from sklearn.ensemble import ExtraTreesRegressor
+from _binner import Binner
 
 from sklearn._loss.loss import (
     _LOSSES,
@@ -76,8 +80,39 @@ def _init_raw_predictions(X, estimator, loss, use_predict_proba):
         return loss.link.link(predictions).reshape(-1, 1)
     else:
         return loss.link.link(predictions)
-
+    
 class BaseBoostedCascade(BaseGradientBoosting):
+    def _bin_data(self, binner, X, is_training_data=True):
+        """
+        Bin data X. If X is training data, the bin mapper is fitted first."""
+        description = "training" if is_training_data else "testing"
+
+        tic = time.time()
+        if is_training_data:
+            X_binned = binner.fit_transform(X)
+        else:
+            X_binned = binner.transform(X)
+            X_binned = np.ascontiguousarray(X_binned)
+        toc = time.time()
+        binning_time = toc - tic
+
+        if self.verbose > 1:
+            msg = (
+                "{} Binning {} data: {:.3f} MB => {:.3f} MB |"
+                " Elapsed = {:.3f} s"
+            )
+            print(
+                msg.format(
+                    str(time.time()),
+                    description,
+                    X.nbytes / (1024 * 1024),
+                    X_binned.nbytes / (1024 * 1024),
+                    binning_time,
+                )
+            )
+
+        return X_binned    
+    
     def __init__(self,
         *,
         loss="log_loss",
@@ -102,7 +137,10 @@ class BaseBoostedCascade(BaseGradientBoosting):
         tol=1e-4,
         ccp_alpha=0.0,
         C=1.0,
-        n_splits=3):
+        n_splits=5,
+        n_bins=255,
+        bin_subsample=200000,
+        bin_type="percentile"):
         super().__init__(loss = loss,
                          learning_rate = learning_rate,
                          n_estimators = n_layers,
@@ -128,6 +166,10 @@ class BaseBoostedCascade(BaseGradientBoosting):
         self.n_estimators = n_estimators
         self.C = C
         self.n_splits = n_splits
+        self.n_bins = n_bins
+        self.bin_subsample = bin_subsample
+        self.bin_type = bin_type
+        self.binners = []
         
     def _init_state(self):
         """Initialize model state and allocate model state data structures."""
@@ -173,6 +215,16 @@ class BaseBoostedCascade(BaseGradientBoosting):
         Returns the number of stages fit; might differ from ``n_estimators``
         due to early stopping.
         """
+        binner_ = Binner(
+            n_bins=self.n_bins,
+            bin_subsample=self.bin_subsample,
+            bin_type=self.bin_type,
+            random_state=self.random_state,
+        )  
+        
+        self.binners.append(binner_)      
+        X_ = self._bin_data(binner_, X, is_training_data=True)
+        
         n_samples = X.shape[0]
         do_oob = self.subsample < 1.0
         sample_mask = np.ones((n_samples,), dtype=bool)
@@ -183,8 +235,8 @@ class BaseBoostedCascade(BaseGradientBoosting):
             verbose_reporter = VerboseReporter(verbose=self.verbose)
             verbose_reporter.init(self, begin_at_stage)
 
-        X_csc = csc_matrix(X) if issparse(X) else None
-        X_csr = csr_matrix(X) if issparse(X) else None
+        X_csc = csc_matrix(X_) if issparse(X) else None
+        X_csr = csr_matrix(X_) if issparse(X) else None
 
         if self.n_iter_no_change is not None:
             loss_history = np.full(self.n_iter_no_change, np.inf)
@@ -194,6 +246,7 @@ class BaseBoostedCascade(BaseGradientBoosting):
 
         # perform boosting iterations
         i = begin_at_stage
+        early_stopping = False
         for i in range(begin_at_stage, self.n_layers):
             # subsampling
             if do_oob:
@@ -208,7 +261,7 @@ class BaseBoostedCascade(BaseGradientBoosting):
             # fit next stage of trees
             raw_predictions = self._fit_stage(
                 i,
-                X,
+                X_,
                 y,
                 raw_predictions,
                 sample_weight,
@@ -260,6 +313,7 @@ class BaseBoostedCascade(BaseGradientBoosting):
                     loss_history[i % len(loss_history)] = validation_loss
                 else:
                     break
+          
         self.n_layers = i + 1
         return i + 1   
     
@@ -297,8 +351,21 @@ class BaseBoostedCascade(BaseGradientBoosting):
             max_features=self.max_features,
             max_leaf_nodes=self.max_leaf_nodes,
             ccp_alpha=self.ccp_alpha,
-            n_estimators=30
+            n_estimators=100*(i+1)
         )  
+        
+        restimator = ExtraTreesRegressor(
+            criterion=self.criterion,
+            max_depth=self.max_depth,
+            min_samples_split=self.min_samples_split,
+            min_samples_leaf=self.min_samples_leaf,
+            min_weight_fraction_leaf=self.min_weight_fraction_leaf,
+            min_impurity_decrease=self.min_impurity_decrease,
+            max_features=self.max_features,
+            max_leaf_nodes=self.max_leaf_nodes,
+            ccp_alpha=self.ccp_alpha,
+            n_estimators=100*(i+1)
+        )        
 
         residual = - loss.gradient(
             y, raw_predictions_copy 
@@ -306,8 +373,19 @@ class BaseBoostedCascade(BaseGradientBoosting):
         
         if len(residual.shape) == 1:
             residual = residual.reshape(-1,1)
+            
+        binner_ = Binner(
+            n_bins=self.n_bins,
+            bin_subsample=self.bin_subsample,
+            bin_type=self.bin_type,
+            random_state=self.random_state,
+        )  
         
-        rp_old = raw_predictions.copy() 
+        self.binners.append(binner_)      
+        
+        rp_old = raw_predictions.copy()
+        rp_old_bin = self._bin_data(binner_, rp_old, is_training_data=True)           
+         
         for k in range(loss.n_classes):
             if loss.n_classes > 2:
                 y = np.array(original_y == k, dtype=np.float64)
@@ -321,19 +399,29 @@ class BaseBoostedCascade(BaseGradientBoosting):
             X = X_csr if X_csr is not None else X
             
             if isinstance(X,np.ndarray):
-                X_aug = np.hstack([X,raw_predictions[:,k].reshape(-1,1)])
+                X_aug = np.hstack([X,rp_old_bin])#[:,k].reshape(-1,1)])
             else:
-                X_aug = hstack([X, csr_matrix(raw_predictions[:,k].reshape(-1,1))])               
+                X_aug = hstack([X, csr_matrix(rp_old_bin)])#[:,k].reshape(-1,1))])               
             
-            for _  in range(self.n_estimators):
-                kfold_estimator = KFoldWrapper(
-                    estimator,
-                    self.n_splits,
-                    self.C,
-                    1. / self.n_estimators,
-                    self.random_state,
-                    self.verbose
-                )
+            for eid  in range(self.n_estimators):
+                if eid %2 == 0:
+                    kfold_estimator = KFoldWrapper(
+                        estimator,
+                        self.n_splits,
+                        self.C,
+                        1. / self.n_estimators,
+                        self.random_state,
+                        self.verbose
+                    )
+                else:
+                    kfold_estimator = KFoldWrapper(
+                        restimator,
+                        self.n_splits,
+                        self.C,
+                        1. / self.n_estimators,
+                        self.random_state,
+                        self.verbose
+                    )                       
                  
                 kfold_estimator.fit(X_aug, residual[:, k], y, raw_predictions, rp_old, k, sample_weight)
                 #kfold_estimator.update_terminal_regions(X_aug, y, raw_predictions, k)
@@ -348,7 +436,7 @@ class BaseBoostedCascade(BaseGradientBoosting):
         """Check input and compute raw predictions of the init estimator."""
         self._check_initialized()
         raw = np.zeros(
-             shape=(X.shape[0], 1), dtype=np.float64
+             shape=(X.shape[0], self.n_trees_per_iteration_), dtype=np.float64
          )
         
         if isinstance(X,np.ndarray):
@@ -379,24 +467,28 @@ class BaseBoostedCascade(BaseGradientBoosting):
             X = self._validate_data(
                 X, dtype=DTYPE, order="C", accept_sparse="csr", reset=False
             )
+        X = self._bin_data(self.binners[0], X, False)
         raw_predictions = self._raw_predict_init(X)
         for i in range(self.estimators_.shape[0]):
             self.predict_stage(i, X, raw_predictions)
             yield raw_predictions.copy() 
             
     def predict_stage(self, i, X, raw_predictions):
+        rp = self._bin_data(self.binners[i + 1], raw_predictions, False)
         new_raw_predictions = np.zeros(raw_predictions.shape)
         for k in range(self._loss.n_classes):
+            
             for estimator in self.estimators_[i,k]:
                 if isinstance(X,np.ndarray):
-                    X_aug = np.hstack([X,raw_predictions[:,k].reshape(-1,1)])         
+                    X_aug = np.hstack([X,rp])#[:,k].reshape(-1,1)])         
                 else:
-                    X_aug = hstack([X,csr_matrix(raw_predictions[:, k]).reshape(-1,1)])           
+                    X_aug = hstack([X,csr_matrix(rp)])#[:, k]).reshape(-1,1)])           
                 new_raw_predictions[:,k] += estimator.predict(X_aug)
         raw_predictions += new_raw_predictions        
                     
     
     def predict_stages(self, X, raw_predictions):
+        X = self._bin_data(self.binners[0], X, False)        
         for i in range(self.n_layers):
             self.predict_stage(i, X, raw_predictions)
  
@@ -421,6 +513,7 @@ class CascadeBoostingClassifier(ClassifierMixin, BaseBoostedCascade):
         min_weight_fraction_leaf=0.0,
         max_depth=3,
         min_impurity_decrease=0.0,
+        C=1.0,
         init=None,
         random_state=None,
         max_features=None,
@@ -447,6 +540,7 @@ class CascadeBoostingClassifier(ClassifierMixin, BaseBoostedCascade):
             max_features=max_features,
             random_state=random_state,
             verbose=verbose,
+            C=C,
             max_leaf_nodes=max_leaf_nodes,
             min_impurity_decrease=min_impurity_decrease,
             warm_start=warm_start,
@@ -595,6 +689,7 @@ class CascadeBoostingRegressor(RegressorMixin, BaseBoostedCascade):
         max_depth=3,
         min_impurity_decrease=0.0,
         init=None,
+        C = 1.0,
         random_state=None,
         max_features=None,
         alpha=0.9,
@@ -620,6 +715,7 @@ class CascadeBoostingRegressor(RegressorMixin, BaseBoostedCascade):
             max_features=max_features,
             min_impurity_decrease=min_impurity_decrease,
             random_state=random_state,
+            C = C,
             alpha=alpha,
             verbose=verbose,
             max_leaf_nodes=max_leaf_nodes,
@@ -649,4 +745,121 @@ class CascadeBoostingRegressor(RegressorMixin, BaseBoostedCascade):
     def apply(self, X):
         leaves = super().apply(X)
         leaves = leaves.reshape(X.shape[0], self.estimators_.shape[0])
-        return leaves                       
+        return leaves   
+    
+class BaseSequentialBoosting(BaseBoostedCascade):
+    def _fit_stage(
+        self,
+        i,
+        X,
+        y,
+        raw_predictions,
+        sample_weight,
+        sample_mask,
+        random_state,
+        X_csc=None,
+        X_csr=None,
+    ):
+        assert sample_mask.dtype == bool
+        loss = self._loss
+        original_y = y
+        
+        for t in range(X.shape[0]):
+                
+
+            # Need to pass a copy of raw_predictions to negative_gradient()
+            # because raw_predictions is partially updated at the end of the loop
+            # in update_terminal_regions(), and gradients need to be evaluated at
+            # iteration i - 1.
+            raw_predictions_copy = raw_predictions.copy()
+            
+            estimator = RandomForestRegressor(
+                criterion=self.criterion,
+                max_depth=self.max_depth,
+                min_samples_split=self.min_samples_split,
+                min_samples_leaf=self.min_samples_leaf,
+                min_weight_fraction_leaf=self.min_weight_fraction_leaf,
+                min_impurity_decrease=self.min_impurity_decrease,
+                max_features=self.max_features,
+                max_leaf_nodes=self.max_leaf_nodes,
+                ccp_alpha=self.ccp_alpha,
+                n_estimators=100*(i+1)
+            )  
+            
+            restimator = ExtraTreesRegressor(
+                criterion=self.criterion,
+                max_depth=self.max_depth,
+                min_samples_split=self.min_samples_split,
+                min_samples_leaf=self.min_samples_leaf,
+                min_weight_fraction_leaf=self.min_weight_fraction_leaf,
+                min_impurity_decrease=self.min_impurity_decrease,
+                max_features=self.max_features,
+                max_leaf_nodes=self.max_leaf_nodes,
+                ccp_alpha=self.ccp_alpha,
+                n_estimators=100*(i+1)
+            )        
+    
+            residual = - loss.gradient(
+                y, raw_predictions_copy 
+            )
+            
+            if len(residual.shape) == 1:
+                residual = residual.reshape(-1,1)
+                
+            binner_ = Binner(
+                n_bins=self.n_bins,
+                bin_subsample=self.bin_subsample,
+                bin_type=self.bin_type,
+                random_state=self.random_state,
+            )  
+            
+            self.binners.append(binner_)      
+            
+            rp_old = raw_predictions.copy()
+            rp_old_bin = self._bin_data(binner_, rp_old, is_training_data=True)           
+             
+            for k in range(loss.n_classes):
+                if loss.n_classes > 2:
+                    y = np.array(original_y == k, dtype=np.float64)
+    
+                # induce regression forest on residuals
+                if self.subsample < 1.0:
+                    # no inplace multiplication!
+                    sample_weight = sample_weight * sample_mask.astype(np.float64)
+    
+                self.estimators_[i, k] = []
+                X = X_csr if X_csr is not None else X
+                
+                if isinstance(X,np.ndarray):
+                    X_aug = np.hstack([X,rp_old_bin])#[:,k].reshape(-1,1)])
+                else:
+                    X_aug = hstack([X, csr_matrix(rp_old_bin)])#[:,k].reshape(-1,1))])               
+                
+                for eid  in range(self.n_estimators):
+                    if eid %2 == 0:
+                        kfold_estimator = KFoldWrapper(
+                            estimator,
+                            self.n_splits,
+                            self.C,
+                            1. / self.n_estimators,
+                            self.random_state,
+                            self.verbose
+                        )
+                    else:
+                        kfold_estimator = KFoldWrapper(
+                            restimator,
+                            self.n_splits,
+                            self.C,
+                            1. / self.n_estimators,
+                            self.random_state,
+                            self.verbose
+                        )                       
+                     
+                    kfold_estimator.fit(X_aug, residual[:, k], y, raw_predictions, rp_old, k, sample_weight)
+                    #kfold_estimator.update_terminal_regions(X_aug, y, raw_predictions, k)
+                    self.estimators_[i, k].append(kfold_estimator)
+                    
+    
+                    # add tree to ensemble
+                
+        return raw_predictions                            

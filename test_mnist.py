@@ -8,8 +8,10 @@ from sklearn import datasets, metrics
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import GradientBoostingClassifier
-
+from deepforest import CascadeForestClassifier
 from boosted_forest import CascadeBoostingClassifier
+from sklearn.ensemble import ExtraTreesClassifier
+from sklearn.ensemble import RandomForestClassifier
 
 digits = datasets.load_digits()
 
@@ -31,7 +33,7 @@ x_train, x_validate, Y_train, Y_validate = train_test_split(
 )
 
 def monitor(i, e, locals):
-    if i > 1 and e.train_score_[i] > e.train_score_[i - 1]:
+    if i > 0 and ((e.train_score_[i] > e.train_score_[i - 1]) or e.train_score_[i] < 0.0001):
         return True
     else: 
         return False
@@ -47,9 +49,23 @@ print(
     f"{metrics.classification_report(Y_validate, Y_v)}\n"
 )
 
-model = CascadeBoostingClassifier(n_layers=10, verbose=2)
+model = CascadeBoostingClassifier(C=1.0, n_layers=10, verbose=2, n_estimators = 4, max_depth=None)
 
 model.fit(x_train, Y_train, monitor = monitor)
+
+Y_v = model.predict(x_validate)
+
+print(
+    f"Boosted Cascade Classification report:\n"
+    f"{metrics.classification_report(Y_validate, Y_v)}\n"
+)
+
+model = CascadeForestClassifier()
+est = [RandomForestClassifier(max_depth=None), ExtraTreesClassifier(max_depth=None),RandomForestClassifier(max_depth=None), ExtraTreesClassifier(max_depth=None)]                            
+model.set_estimator(est) 
+
+
+model.fit(x_train, Y_train)
 
 Y_v = model.predict(x_validate)
 
@@ -57,7 +73,6 @@ print(
     f"Cascade Classification report:\n"
     f"{metrics.classification_report(Y_validate, Y_v)}\n"
 )
-
 
 
 
