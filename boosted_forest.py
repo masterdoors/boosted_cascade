@@ -27,6 +27,7 @@ import time
 
 from sklearn.ensemble import ExtraTreesRegressor
 from _binner import Binner
+from sklearn.model_selection import train_test_split
 
 from sklearn._loss.loss import (
     _LOSSES,
@@ -246,7 +247,7 @@ class BaseBoostedCascade(BaseGradientBoosting):
 
         # perform boosting iterations
         i = begin_at_stage
-        early_stopping = False
+
         for i in range(begin_at_stage, self.n_layers):
             # subsampling
             if do_oob:
@@ -295,17 +296,20 @@ class BaseBoostedCascade(BaseGradientBoosting):
                 encoded_classes = np.argmax(raw_predictions, axis=1)
                 print("Acc: ",accuracy_score(encoded_classes,y)) 
 
-            if monitor is not None:
-                early_stopping = monitor(i, self, locals())
-                if early_stopping:
-                    break
+            #if monitor is not None:
+            #    early_stopping = monitor(i, self, locals())
+            #    if early_stopping:
+            #        break
 
             # We also provide an early stopping based on the score from
             # validation set (X_val, y_val), if n_iter_no_change is set
             if self.n_iter_no_change is not None:
                 # By calling next(y_val_pred_iter), we get the predictions
                 # for X_val after the addition of the current stage
-                validation_loss = loss_(y_val, next(y_val_pred_iter), sample_weight_val)
+                next_ = next(y_val_pred_iter)
+                validation_loss = loss_(y_val, next_, sample_weight_val)
+                encoded_classes = np.argmax(next_, axis=1)
+                print("val loss: ", validation_loss, "val_acc: ", accuracy_score(encoded_classes,y_val))
 
                 # Require validation_score to be better (less) than at least
                 # one of the last n_iter_no_change evaluations
@@ -314,7 +318,7 @@ class BaseBoostedCascade(BaseGradientBoosting):
                 else:
                     break
           
-        self.n_layers = i
+        self.n_layers = i + 1
         return i + 1   
     
     def _fit_stage(
@@ -438,6 +442,7 @@ class BaseBoostedCascade(BaseGradientBoosting):
     
     def _raw_predict_init(self, X):
         """Check input and compute raw predictions of the init estimator."""
+        X = self._bin_data(self.binners[0], X, False)
         self._check_initialized()
         raw = np.zeros(
              shape=(X.shape[0], 1), dtype=np.float64

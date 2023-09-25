@@ -38,7 +38,7 @@ def monitor(i, e, locals):
     else: 
         return False
 
-model = GradientBoostingClassifier(n_estimators=100, verbose=2)
+model = GradientBoostingClassifier(n_estimators=100, verbose=2, n_iter_no_change = 1)
 
 model.fit(x_train, Y_train, monitor = monitor)
 
@@ -49,7 +49,7 @@ print(
     f"{metrics.classification_report(Y_validate, Y_v)}\n"
 )
 
-model = CascadeBoostingClassifier(C=0.01, n_layers=10, verbose=2, n_estimators = 4, max_depth=5)
+model = CascadeBoostingClassifier(C=1.0, n_layers=10, verbose=2, n_estimators = 4, max_depth=4, n_iter_no_change = 1)
 
 model.fit(x_train, Y_train, monitor = monitor)
 
@@ -60,9 +60,9 @@ print(
     f"{metrics.classification_report(Y_validate, Y_v)}\n"
 )
 
-model = CascadeForestClassifier()
-est = [RandomForestClassifier(max_depth=None), ExtraTreesClassifier(max_depth=None),RandomForestClassifier(max_depth=None), ExtraTreesClassifier(max_depth=None)]                            
-model.set_estimator(est) 
+model = CascadeForestClassifier(backend='sklearn')
+#est = [RandomForestClassifier(max_depth=None), ExtraTreesClassifier(max_depth=None),RandomForestClassifier(max_depth=None), ExtraTreesClassifier(max_depth=None)]                            
+#model.set_estimator(est) 
 
 
 model.fit(x_train, Y_train)
