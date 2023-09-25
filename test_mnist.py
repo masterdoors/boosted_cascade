@@ -49,7 +49,7 @@ print(
     f"{metrics.classification_report(Y_validate, Y_v)}\n"
 )
 
-model = CascadeBoostingClassifier(C=1.0, n_layers=10, verbose=2, n_estimators = 4, max_depth=None)
+model = CascadeBoostingClassifier(C=0.01, n_layers=10, verbose=2, n_estimators = 4, max_depth=5)
 
 model.fit(x_train, Y_train, monitor = monitor)
 

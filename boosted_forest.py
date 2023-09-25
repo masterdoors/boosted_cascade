@@ -314,7 +314,7 @@ class BaseBoostedCascade(BaseGradientBoosting):
                 else:
                     break
           
-        self.n_layers = i + 1
+        self.n_layers = i
         return i + 1   
     
     def _fit_stage(
@@ -351,7 +351,9 @@ class BaseBoostedCascade(BaseGradientBoosting):
             max_features=self.max_features,
             max_leaf_nodes=self.max_leaf_nodes,
             ccp_alpha=self.ccp_alpha,
-            n_estimators=100*(i+1)
+            oob_score = True,
+            bootstrap=True,
+            n_estimators=100
         )  
         
         restimator = ExtraTreesRegressor(
@@ -364,7 +366,9 @@ class BaseBoostedCascade(BaseGradientBoosting):
             max_features=self.max_features,
             max_leaf_nodes=self.max_leaf_nodes,
             ccp_alpha=self.ccp_alpha,
-            n_estimators=100*(i+1)
+            oob_score = True,
+            bootstrap=True,
+            n_estimators=100
         )        
 
         residual = - loss.gradient(
@@ -399,9 +403,9 @@ class BaseBoostedCascade(BaseGradientBoosting):
             X = X_csr if X_csr is not None else X
             
             if isinstance(X,np.ndarray):
-                X_aug = np.hstack([X,rp_old_bin])#[:,k].reshape(-1,1)])
+                X_aug = np.hstack([X,rp_old_bin[:,k].reshape(-1,1)])
             else:
-                X_aug = hstack([X, csr_matrix(rp_old_bin)])#[:,k].reshape(-1,1))])               
+                X_aug = hstack([X, csr_matrix(rp_old_bin[:,k].reshape(-1,1))])               
             
             for eid  in range(self.n_estimators):
                 if eid %2 == 0:
@@ -436,7 +440,7 @@ class BaseBoostedCascade(BaseGradientBoosting):
         """Check input and compute raw predictions of the init estimator."""
         self._check_initialized()
         raw = np.zeros(
-             shape=(X.shape[0], self.n_trees_per_iteration_), dtype=np.float64
+             shape=(X.shape[0], 1), dtype=np.float64
          )
         
         if isinstance(X,np.ndarray):
@@ -480,9 +484,9 @@ class BaseBoostedCascade(BaseGradientBoosting):
             
             for estimator in self.estimators_[i,k]:
                 if isinstance(X,np.ndarray):
-                    X_aug = np.hstack([X,rp])#[:,k].reshape(-1,1)])         
+                    X_aug = np.hstack([X,rp[:,k].reshape(-1,1)])         
                 else:
-                    X_aug = hstack([X,csr_matrix(rp)])#[:, k]).reshape(-1,1)])           
+                    X_aug = hstack([X,csr_matrix(rp[:, k]).reshape(-1,1)])           
                 new_raw_predictions[:,k] += estimator.predict(X_aug)
         raw_predictions += new_raw_predictions        
                     
