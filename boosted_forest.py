@@ -278,12 +278,20 @@ class BaseBoostedCascade(BaseGradientBoosting):
                 self.oob_score_ = self.oob_scores_[-1]
             else:
                 # no need to fancy index w/ no subsampling
-                self.train_score_[i] = loss_(y, raw_predictions, sample_weight)
+                if self._loss.n_classes == 2:
+                    K = 1
+                else:
+                    K = self._loss.n_classes    
+                self.train_score_[i] = loss_(y.flatten(), raw_predictions.reshape(-1, K), sample_weight)
 
             if self.verbose > 0:
                 verbose_reporter.update(i, self)
-                encoded_classes = np.argmax(raw_predictions, axis=1)
-                print("Acc: ",accuracy_score(encoded_classes,y)) 
+                if self._loss.n_classes == 2:
+                    encoded_classes = np.asarray(raw_predictions.flatten() >= 0, dtype=int)
+                else:  
+                    K = self._loss.n_classes    
+                    encoded_classes = np.argmax(raw_predictions.reshape(-1, K), axis=1)
+                print("Acc: ",accuracy_score(encoded_classes,y.flatten())) 
 
             if monitor is not None:
                 if monitor(i, self, locals()):
@@ -819,8 +827,14 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
             if loss.n_classes == 2:
                 neg_grad = neg_grad.reshape(-1,1)
             
-            residual[t] = neg_grad                    
-        for k in range(loss.n_classes):  
+            residual[t] = neg_grad   
+            
+        if  loss.n_classes == 2:
+            K = 1
+        else:
+            K = loss.n_classes
+                                    
+        for k in range(K):  
             if loss.n_classes > 2:
                 y = np.array(original_y == k, dtype=np.float64)
                 # induce regression forest on residuals
@@ -828,7 +842,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                 # no inplace multiplication!
                 sample_weight = sample_weight * sample_mask.astype(np.float64)
     
-                self.estimators_[i, k] = []
+            self.estimators_[i, k] = []
                    
             X_aug = np.zeros((X.shape[0],X.shape[1], X.shape[2] + 2))
              
@@ -871,7 +885,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
     
                     # add tree to ensemble
                 
-        return raw_predictions.reshape(X.shape[0],-1,loss.n_classes)   
+        return raw_predictions.reshape(raw_predictions_copy.shape)   
     
     def _raw_predict_init(self, X):
         """Check input and compute raw predictions of the init estimator."""
@@ -886,7 +900,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         else:
             X_aug = hstack([X,csr_matrix(raw)])  
         
-        X = self.estimators_[0, 0][0].estimator_[0]._validate_X_predict(X_aug)
+        #X = self.estimators_[0, 0][0].estimator_[0]._validate_X_predict(X_aug)
         
         if self.init_ == "zero":
             raw_predictions = np.zeros(
@@ -901,8 +915,12 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
     def predict_stage(self, i, X, raw_predictions):
         rp = self._bin_data(self.binners[i + 1], raw_predictions, False)
         new_raw_predictions = np.zeros(raw_predictions.shape)
+        if self._loss.n_classes == 2:
+            K = 1
+        else:
+            K = self._loss.n_classes    
         for t in range(X.shape[0]):
-            for k in range(self._loss.n_classes):
+            for k in range(K):
                 
                 for estimator in self.estimators_[i,k]:
                     if isinstance(X,np.ndarray):
@@ -1034,9 +1052,6 @@ class CascadeSequentialClassifier(ClassifierMixin, BaseSequentialBoostingDummy):
         return y
 
     def decision_function(self, X):
-        X = self._validate_data(
-            X, dtype=DTYPE, order="C", accept_sparse="csr", reset=False
-        )
         raw_predictions = self._raw_predict(X)
         if raw_predictions.shape[1] == 1:
             return raw_predictions.ravel()

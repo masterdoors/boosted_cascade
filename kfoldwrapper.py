@@ -148,7 +148,10 @@ class KFoldWrapper(object):
   
         self.lr[i].fit(I, y.flatten(), bias = bias, sample_weight = sample_weight)
         I = self.getIndicators(e, X,True)
-        raw_predictions[:,k] += self.factor*self.lr[i].decision_function(I) 
+        if len(raw_predictions.shape) == 2:
+            raw_predictions[:,k] += self.factor*self.lr[i].decision_function(I)
+        else:
+            raw_predictions[:,:,k] += self.factor*self.lr[i].decision_function(I).reshape(raw_predictions.shape[0],raw_predictions.shape[1])     
     
     def predict(self, X):
         n_samples, _ = X.shape
