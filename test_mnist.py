@@ -29,7 +29,7 @@ for i in range(len(Y)):
 x = preprocessing.normalize(data, copy=False, axis = 0)
 
 x_train, x_validate, Y_train, Y_validate = train_test_split(
-    x, Y, test_size=0.5, shuffle=False
+    x, Y, test_size=0.5, shuffle=True
 )
 
 def monitor(i, e, locals):
@@ -49,9 +49,9 @@ print(
     f"{metrics.classification_report(Y_validate, Y_v)}\n"
 )
 
-model = CascadeBoostingClassifier(C=1.0, n_layers=10, verbose=2, n_estimators = 4, max_depth=4, n_iter_no_change = 1)
+model = CascadeBoostingClassifier(C=1.0, n_layers=10, verbose=2, n_estimators = 4, max_depth=None, n_iter_no_change = 1, validation_fraction = 0.1)
 
-model.fit(x_train, Y_train, monitor = monitor)
+model.fit(x_train, Y_train)#, monitor = monitor)
 
 Y_v = model.predict(x_validate)
 

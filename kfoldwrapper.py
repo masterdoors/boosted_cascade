@@ -146,7 +146,7 @@ class KFoldWrapper(object):
         
         I = self.getIndicators(e, X, False)
   
-        self.lr[i].fit(I, y, bias = bias, sample_weight = sample_weight)
+        self.lr[i].fit(I, y.flatten(), bias = bias, sample_weight = sample_weight)
         I = self.getIndicators(e, X,True)
         raw_predictions[:,k] += self.factor*self.lr[i].decision_function(I) 
     
