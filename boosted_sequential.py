@@ -1,9 +1,8 @@
 '''
-Created on Sep 16, 2023
+Created on 27 сент. 2023 г.
 
 @author: keen
 '''
-
 from sklearn.ensemble._gb import BaseGradientBoosting
 from sklearn.ensemble._gb import VerboseReporter
 from sklearn.dummy import DummyClassifier, DummyRegressor
@@ -42,149 +41,10 @@ from sklearn._loss.loss import (
     PinballLoss,
 )
 
+from boosted_forest import _init_raw_predictions, BaseBoostedCascade
 
-def _init_raw_predictions(X, estimator, loss, use_predict_proba):
-    # TODO: Use loss.fit_intercept_only where appropriate instead of
-    # DummyRegressor which is the default given by the `init` parameter,
-    # see also _init_state.
-    if len(X.shape) > 2:
-        X_ = X.reshape(-1,X.shape[2])
-    if use_predict_proba:
-        # Our parameter validation, set via _fit_context and _parameter_constraints
-        # already guarantees that estimator has a predict_proba method.
-        predictions = estimator.predict_proba(X_)
-        if not loss.is_multiclass:
-            predictions = predictions[:, 1]  # probability of positive class
-        eps = np.finfo(np.float32).eps  # FIXME: This is quite large!
-        predictions = np.clip(predictions, eps, 1 - eps, dtype=np.float64)
-    else:
-        predictions = estimator.predict(X_).astype(np.float64)
 
-    if predictions.ndim == 1:
-        return loss.link.link(predictions).reshape(-1, 1)
-    else:
-        return loss.link.link(predictions)
-    
-class BaseBoostedCascade(BaseGradientBoosting):
-    def _bin_data(self, binner, X, is_training_data=True):
-        """
-        Bin data X. If X is training data, the bin mapper is fitted first."""
-        description = "training" if is_training_data else "testing"
-
-        tic = time.time()
-        if len(X.shape) > 2:
-            X_ = X.reshape(-1,X.shape[2])
-        else:
-            X_ = X    
-        
-        if is_training_data:
-            X_binned = binner.fit_transform(X_)
-        else:
-            X_binned = binner.transform(X_)
-            X_binned = np.ascontiguousarray(X_binned)
-        toc = time.time()
-        binning_time = toc - tic
-
-        if self.verbose > 1:
-            msg = (
-                "{} Binning {} data: {:.3f} MB => {:.3f} MB |"
-                " Elapsed = {:.3f} s"
-            )
-            print(
-                msg.format(
-                    str(time.time()),
-                    description,
-                    X.nbytes / (1024 * 1024),
-                    X_binned.nbytes / (1024 * 1024),
-                    binning_time,
-                )
-            )
-        if len(X.shape) > 2:
-            X_binned = X_binned.reshape(X.shape) 
-        return X_binned    
-    
-    def __init__(self,
-        *,
-        loss="log_loss",
-        learning_rate=0.1,
-        n_estimators=2,
-        n_layers=3,
-        subsample=1.0,
-        criterion="friedman_mse",
-        min_samples_split=2,
-        min_samples_leaf=1,
-        min_weight_fraction_leaf=0.0,
-        max_depth=3,
-        min_impurity_decrease=0.0,
-        init=None,
-        random_state=None,
-        max_features=None,
-        verbose=0,
-        max_leaf_nodes=None,
-        warm_start=False,
-        validation_fraction=0.1,
-        n_iter_no_change=None,
-        tol=1e-4,
-        ccp_alpha=0.0,
-        C=1.0,
-        n_splits=5,
-        n_bins=255,
-        bin_subsample=200000,
-        bin_type="percentile"):
-        super().__init__(loss = loss,
-                         learning_rate = learning_rate,
-                         n_estimators = n_layers,
-                         subsample = subsample,
-                         criterion = criterion,
-                         min_samples_split = min_samples_split,
-                         min_samples_leaf = min_samples_leaf,
-                         min_weight_fraction_leaf = min_weight_fraction_leaf,
-                         max_depth = max_depth,
-                         min_impurity_decrease = min_impurity_decrease,
-                         init = init,
-                         random_state = random_state,
-                         max_features = max_features,
-                         verbose = verbose,
-                         max_leaf_nodes = max_leaf_nodes,
-                         warm_start = warm_start,
-                         validation_fraction = validation_fraction,
-                         n_iter_no_change = n_iter_no_change,
-                         tol = tol,
-                         ccp_alpha = ccp_alpha
-                         )
-        self.n_layers = n_layers
-        self.n_estimators = n_estimators
-        self.C = C
-        self.n_splits = n_splits
-        self.n_bins = n_bins
-        self.bin_subsample = bin_subsample
-        self.bin_type = bin_type
-        self.binners = []
-        
-    def _init_state(self):
-        """Initialize model state and allocate model state data structures."""
-
-        self.init_ = self.init
-        if self.init_ is None:
-            if is_classifier(self):
-                self.init_ = DummyClassifier(strategy="prior")
-            elif isinstance(self._loss, (AbsoluteError, HuberLoss)):
-                self.init_ = DummyRegressor(strategy="quantile", quantile=0.5)
-            elif isinstance(self._loss, PinballLoss):
-                self.init_ = DummyRegressor(strategy="quantile", quantile=self.alpha)
-            else:
-                self.init_ = DummyRegressor(strategy="mean")
-
-        self.estimators_ = np.empty(
-            (self.n_layers, self.n_trees_per_iteration_), dtype=object
-        )
-        self.train_score_ = np.zeros((self.n_layers,), dtype=np.float64)
-        # do oob?
-        if self.subsample < 1.0:
-            self.oob_improvement_ = np.zeros((self.n_layers), dtype=np.float64)
-            self.oob_scores_ = np.zeros((self.n_layers), dtype=np.float64)
-            self.oob_score_ = np.nan           
-    
+class BaseSequentialBoostingDummy(BaseBoostedCascade):
     def _fit_stages(
         self,
         X,
@@ -236,6 +96,8 @@ class BaseBoostedCascade(BaseGradientBoosting):
 
         # perform boosting iterations
         i = begin_at_stage
+        
+        history = np.zeros(raw_predictions.shape)
 
         for i in range(begin_at_stage, self.n_layers):
             # subsampling
@@ -254,6 +116,7 @@ class BaseBoostedCascade(BaseGradientBoosting):
                 X_,
                 y,
                 raw_predictions,
+                history,
                 sample_weight,
                 sample_mask,
                 random_state,
@@ -315,7 +178,7 @@ class BaseBoostedCascade(BaseGradientBoosting):
                     break
           
         self.n_layers = i
-        return i + 1   
+        return i + 1       
     
     def _fit_stage(
         self,
@@ -323,23 +186,16 @@ class BaseBoostedCascade(BaseGradientBoosting):
         X,
         y,
         raw_predictions,
+        history,
         sample_weight,
         sample_mask,
         random_state,
         X_csc=None,
         X_csr=None,
     ):
-        """Fit another stage of ``_n_classes`` trees to the boosting model."""
-
         assert sample_mask.dtype == bool
         loss = self._loss
         original_y = y
-
-        # Need to pass a copy of raw_predictions to negative_gradient()
-        # because raw_predictions is partially updated at the end of the loop
-        # in update_terminal_regions(), and gradients need to be evaluated at
-        # iteration i - 1.
-        raw_predictions_copy = raw_predictions.copy()
         
         estimator = RandomForestRegressor(
             criterion=self.criterion,
@@ -351,9 +207,7 @@ class BaseBoostedCascade(BaseGradientBoosting):
             max_features=self.max_features,
             max_leaf_nodes=self.max_leaf_nodes,
             ccp_alpha=self.ccp_alpha,
-            oob_score = True,
-            bootstrap=True,
-            n_estimators=100
+            n_estimators=100*(i+1)
         )  
         
         restimator = ExtraTreesRegressor(
@@ -366,18 +220,14 @@ class BaseBoostedCascade(BaseGradientBoosting):
             max_features=self.max_features,
             max_leaf_nodes=self.max_leaf_nodes,
             ccp_alpha=self.ccp_alpha,
-            oob_score = True,
-            bootstrap=True,
-            n_estimators=100
+            n_estimators=100*(i+1)
         )        
 
-        residual = - loss.gradient(
-            y, raw_predictions_copy 
-        )
-        
-        if len(residual.shape) == 1:
-            residual = residual.reshape(-1,1)
-            
+        # Need to pass a copy of raw_predictions to negative_gradient()
+        # because raw_predictions is partially updated at the end of the loop
+        # in update_terminal_regions(), and gradients need to be evaluated at
+        # iteration i - 1.
+        raw_predictions_copy = raw_predictions.copy()
         binner_ = Binner(
             n_bins=self.n_bins,
             bin_subsample=self.bin_subsample,
@@ -388,25 +238,64 @@ class BaseBoostedCascade(BaseGradientBoosting):
         self.binners.append(binner_)      
         
         rp_old = raw_predictions.copy()
-        rp_old_bin = self._bin_data(binner_, rp_old, is_training_data=True)           
-         
-        for k in range(loss.n_classes):
+        rp_old_bin = self._bin_data(binner_, rp_old, is_training_data=True)       
+        
+        if loss.n_classes == 2:
+            residual = np.zeros((X.shape[0],X.shape[1], 1))
+        else:    
+            residual = np.zeros((X.shape[0],X.shape[1], loss.n_classes))     
+            
+        X = X_csr if X_csr is not None else X
+
+        if  loss.n_classes == 2:
+            K = 1
+        else:
+            K = loss.n_classes
+        
+        alpha = 1.0
+        for t in reversed(range(0,X.shape[1])):
+            #dummy loss
+            neg_grad = - loss.gradient(
+                y[:,t].copy(order='C'), raw_predictions_copy[:,t].copy(order='C') 
+            )
+            
+            if not self.dummy_loss and i > 0 and t < X.shape[1]-1:
+                if K > 1: 
+                    for k in range(K):
+                        neg_grad[:,k] -= alpha*np.kron(history[:,t + 1,k], residual[:,t + 1])
+                else:     
+                    neg_grad -= alpha*(np.multiply(history[:,t + 1,0],residual[:,t + 1].flatten()))
+            
+            if loss.n_classes == 2:
+                neg_grad = neg_grad.reshape(-1,1)
+            
+            residual[:,t] = neg_grad   
+        
+        history.fill(0.)    
+        for k in range(K):  
             if loss.n_classes > 2:
                 y = np.array(original_y == k, dtype=np.float64)
-
-            # induce regression forest on residuals
+                # induce regression forest on residuals
             if self.subsample < 1.0:
                 # no inplace multiplication!
                 sample_weight = sample_weight * sample_mask.astype(np.float64)
-
+    
             self.estimators_[i, k] = []
-            X = X_csr if X_csr is not None else X
-            
-            if isinstance(X,np.ndarray):
-                X_aug = np.hstack([X,rp_old_bin[:,k].reshape(-1,1)])
-            else:
-                X_aug = hstack([X, csr_matrix(rp_old_bin[:,k].reshape(-1,1))])               
-            
+                   
+            X_aug = np.zeros((X.shape[0],X.shape[1], X.shape[2] + 2))
+             
+            for t in range(X.shape[1]):                      
+                if t > 0:
+                    if isinstance(X,np.ndarray):
+                        X_aug[:,t] = np.hstack([X[:,t],rp_old_bin[:,t - 1,k].reshape(-1,1), rp_old_bin[:,t,k].reshape(-1,1)])#[:,k].reshape(-1,1)])
+                    else:
+                        X_aug[:,t] = hstack([X[:,t], csr_matrix(rp_old_bin[:,t - 1,k].reshape(-1,1)), csr_matrix(rp_old_bin[:,t,k].reshape(-1,1))])#[:,k].reshape(-1,1))])
+                else:
+                    if isinstance(X,np.ndarray):
+                        X_aug[:,t] = np.hstack([X[:,t],np.zeros(rp_old_bin[:,t,k].shape).reshape(-1,1), rp_old_bin[:,t,k].reshape(-1,1)])#[:,k].reshape(-1,1)])
+                    else:
+                        X_aug[:,t] = hstack([X[:,t], csr_matrix(np.zeros(rp_old_bin[:,t,k].shape)).reshape(-1,1), csr_matrix(rp_old_bin[:,t,k]).reshape(-1,1)])#[:,k].reshape(-1,1))])
+                                            
             for eid  in range(self.n_estimators):
                 if eid %2 == 0:
                     kfold_estimator = KFoldWrapper(
@@ -427,21 +316,21 @@ class BaseBoostedCascade(BaseGradientBoosting):
                         self.verbose
                     )                       
                  
-                kfold_estimator.fit(X_aug, residual[:, k], y, raw_predictions, rp_old, k, sample_weight)
+                history[:,:,k] += kfold_estimator.fit(X_aug.reshape(-1,X_aug.shape[2]), residual[:,:, k].reshape(-1,1), y, raw_predictions, rp_old.reshape(-1,residual.shape[2]), k, sample_weight)
                 #kfold_estimator.update_terminal_regions(X_aug, y, raw_predictions, k)
                 self.estimators_[i, k].append(kfold_estimator)
+                    
+    
+                    # add tree to ensemble
                 
-
-                # add tree to ensemble
-                
-        return raw_predictions    
+        return raw_predictions.reshape(raw_predictions_copy.shape)   
     
     def _raw_predict_init(self, X):
         """Check input and compute raw predictions of the init estimator."""
         X = self._bin_data(self.binners[0], X, False)
         self._check_initialized()
         raw = np.zeros(
-             shape=(X.shape[0], 1), dtype=np.float64
+             shape=(X.shape[0], X.shape[1], 1), dtype=np.float64
          )
         
         if isinstance(X,np.ndarray):
@@ -449,56 +338,44 @@ class BaseBoostedCascade(BaseGradientBoosting):
         else:
             X_aug = hstack([X,csr_matrix(raw)])  
         
-        X = self.estimators_[0, 0][0].estimator_[0]._validate_X_predict(X_aug)
+        #X = self.estimators_[0, 0][0].estimator_[0]._validate_X_predict(X_aug)
         
         if self.init_ == "zero":
             raw_predictions = np.zeros(
-                shape=(X.shape[0], self.n_trees_per_iteration_), dtype=np.float64
+                shape=(X.shape[0], X.shape[1], self.n_trees_per_iteration_), dtype=np.float64
             )
         else:
             raw_predictions = _init_raw_predictions(
                 X, self.init_, self._loss, is_classifier(self)
             )
-        return raw_predictions    
+        return raw_predictions.reshape(X.shape[0],X.shape[1],-1)    
     
-    def _raw_predict(self, X):
-        """Return the sum of the trees raw predictions (+ init estimator)."""
-        raw_predictions = self._raw_predict_init(X)
-        self.predict_stages(X,raw_predictions)
-        return raw_predictions
-
-    def _staged_raw_predict(self, X, check_input=True):
-        if check_input:
-            X = self._validate_data(
-                X, dtype=DTYPE, order="C", accept_sparse="csr", reset=False
-            )
-        X = self._bin_data(self.binners[0], X, False)
-        raw_predictions = self._raw_predict_init(X)
-        for i in range(self.estimators_.shape[0]):
-            self.predict_stage(i, X, raw_predictions)
-            yield raw_predictions.copy() 
-            
     def predict_stage(self, i, X, raw_predictions):
         rp = self._bin_data(self.binners[i + 1], raw_predictions, False)
         new_raw_predictions = np.zeros(raw_predictions.shape)
-        for k in range(self._loss.n_classes):
-            
-            for estimator in self.estimators_[i,k]:
-                if isinstance(X,np.ndarray):
-                    X_aug = np.hstack([X,rp[:,k].reshape(-1,1)])         
-                else:
-                    X_aug = hstack([X,csr_matrix(rp[:, k]).reshape(-1,1)])  
-                    
-                new_raw_predictions[:,k] += estimator.predict(X_aug)
-        raw_predictions += new_raw_predictions        
-                    
-    
-    def predict_stages(self, X, raw_predictions):
-        X = self._bin_data(self.binners[0], X, False)        
-        for i in range(self.n_layers):
-            self.predict_stage(i, X, raw_predictions)
- 
-class CascadeBoostingClassifier(ClassifierMixin, BaseBoostedCascade):
+        if self._loss.n_classes == 2:
+            K = 1
+        else:
+            K = self._loss.n_classes    
+        for t in range(X.shape[1]):
+            for k in range(K):
+                
+                for estimator in self.estimators_[i,k]:
+                    if t > 0:
+                        if isinstance(X,np.ndarray):
+                            X_aug = np.hstack([X[:,t],rp[:,t-1,k].reshape(-1,1), rp[:,t,k].reshape(-1,1)])         
+                        else:
+                            X_aug = hstack([X[:,t],csr_matrix(rp[:,t-1, k]).reshape(-1,1),csr_matrix(rp[:,t, k]).reshape(-1,1)])
+                    else:
+                        if isinstance(X,np.ndarray):
+                            X_aug = np.hstack([X[:,t],np.zeros(rp[:,t,k].shape).reshape(-1,1), rp[:,t,k].reshape(-1,1)])#[:,k].reshape(-1,1)])
+                        else:
+                            X_aug = hstack([X[:,t], csr_matrix(np.zeros(rp[:,t,k].shape)).reshape(-1,1), csr_matrix(rp[:,t,k]).reshape(-1,1)])#[:,k].reshape(-1,1))])
+
+                    new_raw_predictions[:,t,k] += estimator.predict(X_aug)
+        raw_predictions += new_raw_predictions     
+        
+class CascadeSequentialClassifier(ClassifierMixin, BaseSequentialBoostingDummy):
     _parameter_constraints: dict = {
         **BaseBoostedCascade._parameter_constraints,
         "loss": [StrOptions({"log_loss", "exponential"})],
@@ -555,6 +432,7 @@ class CascadeBoostingClassifier(ClassifierMixin, BaseBoostedCascade):
             tol=tol,
             ccp_alpha=ccp_alpha,
         )
+        self.dummy_loss = False
 
     def _encode_y(self, y, sample_weight):
         # encode classes into 0 ... n_classes - 1 and sets attributes classes_
@@ -562,13 +440,13 @@ class CascadeBoostingClassifier(ClassifierMixin, BaseBoostedCascade):
         check_classification_targets(y)
 
         label_encoder = LabelEncoder()
-        encoded_y_int = label_encoder.fit_transform(y)
+        encoded_y_int = label_encoder.fit_transform(y.flatten())
         self.classes_ = label_encoder.classes_
         n_classes = self.classes_.shape[0]
         # only 1 tree for binary classification. For multiclass classification,
         # we build 1 tree per class.
         self.n_trees_per_iteration_ = 1 if n_classes <= 2 else n_classes
-        encoded_y = encoded_y_int.astype(float, copy=False)
+        encoded_y = encoded_y_int.astype(float, copy=False).reshape(y.shape)
 
         # From here on, it is additional to the HGBT case.
         # expose n_classes_ attribute
@@ -620,9 +498,6 @@ class CascadeBoostingClassifier(ClassifierMixin, BaseBoostedCascade):
         return y
 
     def decision_function(self, X):
-        X = self._validate_data(
-            X, dtype=DTYPE, order="C", accept_sparse="csr", reset=False
-        )
         raw_predictions = self._raw_predict(X)
         if raw_predictions.shape[1] == 1:
             return raw_predictions.ravel()
@@ -633,12 +508,12 @@ class CascadeBoostingClassifier(ClassifierMixin, BaseBoostedCascade):
 
     def predict(self, X):
         raw_predictions = self.decision_function(X)
-        if raw_predictions.ndim == 1:  # decision_function already squeezed it
+        if self._loss.n_classes == 2:  # decision_function already squeezed it
             encoded_classes = (raw_predictions >= 0).astype(int)
         else:
-            encoded_classes = np.argmax(raw_predictions, axis=1)
+            encoded_classes = np.argmax(raw_predictions, axis=2)
             
-        return self.classes_[encoded_classes]
+        return self.classes_[encoded_classes].reshape(X.shape[0],X.shape[1])
 
 
     def staged_predict(self, X):
@@ -671,85 +546,162 @@ class CascadeBoostingClassifier(ClassifierMixin, BaseBoostedCascade):
             raise AttributeError(
                 "loss=%r does not support predict_proba" % self.loss
             ) from e
+            
+    def fit(self, X, y, sample_weight=None, monitor=None):
+        if not self.warm_start:
+            self._clear_state()
 
+        # Check input
+        # Since check_array converts both X and y to the same dtype, but the
+        # trees use different types for X and y, checking them separately.
 
-class CascadeBoostingRegressor(RegressorMixin, BaseBoostedCascade):
-    _parameter_constraints: dict = {
-        **BaseBoostedCascade._parameter_constraints,
-        "loss": [StrOptions({"squared_error", "absolute_error", "huber", "quantile"})],
-        "init": [StrOptions({"zero"}), None, HasMethods(["fit", "predict"])],
-        "alpha": [Interval(Real, 0.0, 1.0, closed="neither")],
-    }
+        sample_weight_is_none = sample_weight is None
+        #sample_weight = _check_sample_weight(sample_weight, X)
+        if sample_weight_is_none:
+            y = self._encode_y(y=y, sample_weight=None)
+        else:
+            y = self._encode_y(y=y, sample_weight=sample_weight)
+        self.n_features_in_ = X.shape[2] 
+        self._set_max_features()
 
-    def __init__(
-        self,
-        *,
-        loss="squared_error",
-        learning_rate=0.1,
-        n_estimators=100,
-        subsample=1.0,
-        criterion="friedman_mse",
-        min_samples_split=2,
-        min_samples_leaf=1,
-        min_weight_fraction_leaf=0.0,
-        max_depth=3,
-        min_impurity_decrease=0.0,
-        init=None,
-        C = 1.0,
-        random_state=None,
-        max_features=None,
-        alpha=0.9,
-        verbose=0,
-        max_leaf_nodes=None,
-        warm_start=False,
-        validation_fraction=0.1,
-        n_iter_no_change=None,
-        tol=1e-4,
-        ccp_alpha=0.0,
-    ):
-        super().__init__(
-            loss=loss,
-            learning_rate=learning_rate,
-            n_estimators=n_estimators,
-            criterion=criterion,
-            min_samples_split=min_samples_split,
-            min_samples_leaf=min_samples_leaf,
-            min_weight_fraction_leaf=min_weight_fraction_leaf,
-            max_depth=max_depth,
-            init=init,
-            subsample=subsample,
-            max_features=max_features,
-            min_impurity_decrease=min_impurity_decrease,
-            random_state=random_state,
-            C = C,
-            alpha=alpha,
-            verbose=verbose,
-            max_leaf_nodes=max_leaf_nodes,
-            warm_start=warm_start,
-            validation_fraction=validation_fraction,
-            n_iter_no_change=n_iter_no_change,
-            tol=tol,
-            ccp_alpha=ccp_alpha,
+        # self.loss is guaranteed to be a string
+        self._loss = self._get_loss(sample_weight=sample_weight)
+
+        if self.n_iter_no_change is not None:
+            stratify = y if is_classifier(self) else None
+            (
+                X_train,
+                X_val,
+                y_train,
+                y_val,
+                sample_weight_train,
+                sample_weight_val,
+            ) = train_test_split(
+                X,
+                y,
+                sample_weight,
+                random_state=self.random_state,
+                test_size=self.validation_fraction,
+                stratify=stratify,
+            )
+            if is_classifier(self):
+                if self.n_classes_ != np.unique(y_train).shape[0]:
+                    # We choose to error here. The problem is that the init
+                    # estimator would be trained on y, which has some missing
+                    # classes now, so its predictions would not have the
+                    # correct shape.
+                    raise ValueError(
+                        "The training data after the early stopping split "
+                        "is missing some classes. Try using another random "
+                        "seed."
+                    )
+        else:
+            X_train, y_train, sample_weight_train = X, y, sample_weight
+            X_val = y_val = sample_weight_val = None
+
+        n_samples = X_train.shape[0]
+
+        # First time calling fit.
+        if not self._is_fitted():
+            # init state
+            self._init_state()
+
+            # fit initial model and initialize raw predictions
+            if self.init_ == "zero":
+                raw_predictions = np.zeros(
+                    shape=(n_samples, self.n_trees_per_iteration_),
+                    dtype=np.float64,
+                )
+            else:
+                # XXX clean this once we have a support_sample_weight tag
+                if sample_weight_is_none:
+                    self.init_.fit(X_train.reshape(-1,X_train.shape[2]), y_train.flatten())
+                else:
+                    msg = (
+                        "The initial estimator {} does not support sample "
+                        "weights.".format(self.init_.__class__.__name__)
+                    )
+                    try:
+                        self.init_.fit(
+                            X_train.reshape(-1,X_train.shape[2]), y_train.flatten(), sample_weight=sample_weight_train
+                        )
+                    except TypeError as e:
+                        if "unexpected keyword argument 'sample_weight'" in str(e):
+                            # regular estimator without SW support
+                            raise ValueError(msg) from e
+                        else:  # regular estimator whose input checking failed
+                            raise
+                    except ValueError as e:
+                        if (
+                            "pass parameters to specific steps of "
+                            "your pipeline using the "
+                            "stepname__parameter"
+                            in str(e)
+                        ):  # pipeline
+                            raise ValueError(msg) from e
+                        else:  # regular estimator whose input checking failed
+                            raise
+
+                raw_predictions = _init_raw_predictions(
+                    X_train, self.init_, self._loss, is_classifier(self)
+                )
+                
+                raw_predictions = raw_predictions.reshape(X.shape[0],X.shape[1],-1)
+ 
+            begin_at_stage = 0
+
+            # The rng state must be preserved if warm_start is True
+            self._rng = check_random_state(self.random_state)
+
+        # warm start: this is not the first time fit was called
+        else:
+            # add more estimators to fitted model
+            # invariant: warm_start = True
+            if self.n_estimators < self.estimators_.shape[0]:
+                raise ValueError(
+                    "n_estimators=%d must be larger or equal to "
+                    "estimators_.shape[0]=%d when "
+                    "warm_start==True" % (self.n_estimators, self.estimators_.shape[0])
+                )
+            begin_at_stage = self.estimators_.shape[0]
+            # The requirements of _raw_predict
+            # are more constrained than fit. It accepts only CSR
+            # matrices. Finite values have already been checked in _validate_data.
+            X_train = check_array(
+                X_train,
+                dtype=DTYPE,
+                order="C",
+                accept_sparse="csr",
+                force_all_finite=False,
+            )
+            raw_predictions = self._raw_predict(X_train)
+            self._resize_state()
+
+        # fit the boosting stages
+        n_stages = self._fit_stages(
+            X_train,
+            y_train,
+            raw_predictions,
+            sample_weight_train,
+            self._rng,
+            X_val,
+            y_val,
+            sample_weight_val,
+            begin_at_stage,
+            monitor,
         )
 
-    def _validate_y(self, y, sample_weight=None):
-        if y.dtype.kind == "O":
-            y = y.astype(DOUBLE)
-        return y
-    
-    def predict(self, X):
-        X = self._validate_data(
-            X, dtype=DTYPE, order="C", accept_sparse="csr", reset=False
-        )
-        # In regression we can directly return the raw value from the trees.
-        return self._raw_predict(X).ravel()
+        # change shape of arrays after fit (early-stopping or additional ests)
+        if n_stages != self.estimators_.shape[0]:
+            self.estimators_ = self.estimators_[:n_stages]
+            self.train_score_ = self.train_score_[:n_stages]
+            if hasattr(self, "oob_improvement_"):
+                # OOB scores were computed
+                self.oob_improvement_ = self.oob_improvement_[:n_stages]
+                self.oob_scores_ = self.oob_scores_[:n_stages]
+                self.oob_score_ = self.oob_scores_[-1]
+        self.n_estimators_ = n_stages
+        return self            
+           
+                          
 
-    def staged_predict(self, X):
-        for raw_predictions in self._staged_raw_predict(X):
-            yield raw_predictions.ravel()
-
-    def apply(self, X):
-        leaves = super().apply(X)
-        leaves = leaves.reshape(X.shape[0], self.estimators_.shape[0])
-        return leaves   
-    
