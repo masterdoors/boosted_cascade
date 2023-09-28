@@ -8,15 +8,18 @@ from sklearn import metrics
 import numpy as np
 from sklearn.model_selection import train_test_split
 from boosted_sequential import CascadeSequentialClassifier
+from sklearn.metrics import log_loss
 
 
-
-X = np.asarray([[0,0,1,1,0],[1,0,0,0,0],[0,1,0,0,1],[1,0,1,1,0],[1,1,0,0,1],[0,1,1,1,1]]).reshape(5,6,1)
-y = np.asarray([[0,1,1,0,0],[0,0,0,0,1],[1,0,0,1,0],[0,1,1,0,1],[1,0,0,1,1],[1,1,1,1,0]]).reshape(5,6)
+X = np.asarray([[0,0,1,1,0],[1,0,0,0,0],[0,1,0,0,1],[1,0,1,1,0],[1,1,0,0,1],[0,1,1,1,1],[0,0,0,0,0],[1,1,1,1,1]]).reshape(8,5,1)
+y = np.asarray([[0,1,1,0,0],[0,0,0,0,1],[1,0,0,1,0],[0,1,1,0,1],[1,0,0,1,1],[1,1,1,1,0],[0,0,0,0,0],[1,1,1,1,1]]).reshape(8,5)
 
 x_train, x_validate, Y_train, Y_validate = train_test_split(
     X, y, test_size=0.5, shuffle=True
 )
+
+def sigmoid(x):
+    return 1. / (1 + np.exp(-x))
 
 model = CascadeSequentialClassifier(C=1.0, n_layers=5, verbose=2, n_estimators = 4, max_depth=5,max_features='sqrt')#, n_iter_no_change = 1, validation_fraction = 0.1)
 
@@ -27,3 +30,5 @@ Y_v = model.predict(x_validate)
 print(
     f"Boosted Cascade Classification report:\n"
     f"{metrics.classification_report(Y_validate.flatten(), Y_v.flatten())}\n")
+
+print("Cross-entropy: ", log_loss(Y_validate.flatten(), sigmoid(Y_v.reshape(-1,1))))

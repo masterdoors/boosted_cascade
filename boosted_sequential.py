@@ -22,6 +22,7 @@ from kfoldwrapper import KFoldWrapper
 from sklearn.ensemble import RandomForestRegressor
 from numbers import Integral, Real
 from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import log_loss
 
 from sklearn.metrics import  accuracy_score
 import time
@@ -58,13 +59,11 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         begin_at_stage=0,
         monitor=None,
     ):
-        """Iteratively fits the stages.
+        
+        def sigmoid(x):
+            return 1. / (1 + np.exp(-x))
+          
 
-        For each stage it computes the progress (OOB, train score)
-        and delegates to ``_fit_stage``.
-        Returns the number of stages fit; might differ from ``n_estimators``
-        due to early stopping.
-        """
         binner_ = Binner(
             n_bins=self.n_bins,
             bin_subsample=self.bin_subsample,
@@ -155,6 +154,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                     K = self._loss.n_classes    
                     encoded_classes = np.argmax(raw_predictions.reshape(X.shape[0],X.shape[1], K), axis=2)
                 print("Acc: ",accuracy_score(encoded_classes.flatten(),y.flatten())) 
+                print("Cross-entropy: ", log_loss(y.flatten(),sigmoid(raw_predictions.reshape(-1, 1))))
 
             if monitor is not None:
                 if monitor(i, self, locals()):
@@ -252,7 +252,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         else:
             K = loss.n_classes
         
-        alpha = 1.0
+        alpha = 0.1
         for t in reversed(range(0,X.shape[1])):
             #dummy loss
             neg_grad = - loss.gradient(
@@ -262,9 +262,25 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
             if not self.dummy_loss and i > 0 and t < X.shape[1]-1:
                 if K > 1: 
                     for k in range(K):
-                        neg_grad[:,k] -= alpha*np.kron(history[:,t + 1,k], residual[:,t + 1])
-                else:     
-                    neg_grad -= alpha*(np.multiply(history[:,t + 1,0],residual[:,t + 1].flatten()))
+                        neg_grad[:,k] -= alpha*np.multiply(history[:,t + 1,k], residual[:,t + 1])
+                        for t2 in range(t + 1,X.shape[1]):
+                            h = np.ones(shape=(history.shape[0],))
+                            for t3 in range(t + 1,t2 + 1):
+                                h = np.multiply(h,history[:,t3, k])
+                            next_grad = - loss.gradient(
+                                y[:,t2].copy(order='C'), raw_predictions_copy[:,t2].copy(order='C') 
+                            )   
+                            neg_grad[:,k] -= alpha*np.multiply(h,next_grad[:,k].flatten())                        
+                else:  
+
+                    for t2 in range(t + 1,X.shape[1]):
+                        h = np.ones(shape=(history.shape[0],))
+                        for t3 in range(t + 1,t2 + 1):
+                            h = np.multiply(h,history[:,t3, 0])
+                        next_grad = - loss.gradient(
+                            y[:,t2].copy(order='C'), raw_predictions_copy[:,t2].copy(order='C') 
+                        )   
+                        neg_grad -= alpha*np.multiply(h,next_grad.flatten())
             
             if loss.n_classes == 2:
                 neg_grad = neg_grad.reshape(-1,1)
