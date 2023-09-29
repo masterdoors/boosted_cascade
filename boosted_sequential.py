@@ -62,6 +62,11 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         
         def sigmoid(x):
             return 1. / (1 + np.exp(-x))
+        
+
+        def ce_score(logits, labels):
+            ce = log_loss(labels.flatten(),sigmoid(logits.reshape(-1, 1)))
+            return  np.exp(ce / labels.shape[1])         
           
 
         binner_ = Binner(
@@ -154,7 +159,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                     K = self._loss.n_classes    
                     encoded_classes = np.argmax(raw_predictions.reshape(X.shape[0],X.shape[1], K), axis=2)
                 print("Acc: ",accuracy_score(encoded_classes.flatten(),y.flatten())) 
-                print("Cross-entropy: ", log_loss(y.flatten(),sigmoid(raw_predictions.reshape(-1, 1))))
+                print("Cross-entropy: ", ce_score(raw_predictions, y))
 
             if monitor is not None:
                 if monitor(i, self, locals()):
