@@ -72,7 +72,10 @@ def sigmoid(x):
     return 1. / (1 + np.exp(-x))
 
 def ce_score(logits, labels):
-    ce = log_loss(labels.flatten(),sigmoid(logits.reshape(-1, 1)))
+    labels_ = np.zeros((labels.shape[0], labels.shape[1], 2))
+    labels_[labels == 1,1] = 1.
+    labels_[labels == 0,0] = 1.                    
+    ce = log_loss(labels_.reshape(-1,2),logits.reshape(-1,2))
     return  np.exp(ce / labels.shape[1])  
 
 def make_model(input_shape):
@@ -114,7 +117,7 @@ history = model.fit(
 
 model = tf.keras.models.load_model("best_model.h5")
 
-Y_v = model.predict(x_validate)[:,:,1]
+Y_v = model.predict(x_validate)
 
 
 #print(
@@ -161,7 +164,7 @@ history = model.fit(
 
 model = tf.keras.models.load_model("best_model.h5")
 
-Y_v = model.predict(x_validate)[:,:,1]
+Y_v = model.predict(x_validate)
 
 
 #print(
