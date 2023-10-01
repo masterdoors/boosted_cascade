@@ -40,7 +40,9 @@ def polyndrome(n):
         grids.append(grid)        
     return np.vstack(grids) 
 
-grammar = UnmarkedReversalGrammar(2,40)
+
+#for str_len in []
+grammar = UnmarkedReversalGrammar(2,20)
 remove_epsilon_rules(grammar)
 remove_unary_rules(grammar)
 
@@ -48,8 +50,8 @@ remove_unary_rules(grammar)
 sampler = LengthSampler(grammar)
 generator = random.Random()
 
-X = np.asarray([list(sampler.sample(40, generator))
-        for i in range(3200)])  
+X = np.asarray([list(sampler.sample(20, generator))
+        for i in range(10000)])  
 
 
 parser = Parser(grammar)
@@ -75,8 +77,8 @@ def ce_score(logits, labels):
     labels_ = np.zeros((labels.shape[0], labels.shape[1], 2))
     labels_[labels == 1,1] = 1.
     labels_[labels == 0,0] = 1.                    
-    ce = log_loss(labels_.reshape(-1,2),logits.reshape(-1,2))
-    return  np.exp(ce / labels.shape[1])  
+    ce = log_loss(labels_.reshape(-1,2),logits.reshape(-1,2),normalize=False)
+    return  np.exp(ce / (labels.shape[1] * labels.shape[0]))  
 
 def make_model(input_shape):
     input_layer = tf.keras.layers.Input(input_shape)
@@ -85,18 +87,14 @@ def make_model(input_shape):
 
     return tf.keras.models.Model(inputs=input_layer, outputs=output_layer)
 
-epochs = 10
-batch_size = 32
+epochs = 100
+batch_size = 10
 
 model = make_model(input_shape=x_train.shape[1:])
 callbacks = [
-    tf.keras.callbacks.ModelCheckpoint(
-        "best_model.h5", save_best_only=True, monitor="val_loss"
-    ),
     tf.keras.callbacks.ReduceLROnPlateau(
         monitor="val_loss", factor=0.5, patience=20, min_lr=0.0001
     ),
-    tf.keras.callbacks.EarlyStopping(monitor="val_loss", patience=50, verbose=1),
 ]
 model.compile(
     optimizer="adam",
@@ -115,8 +113,6 @@ history = model.fit(
     verbose=1,
 )
 
-model = tf.keras.models.load_model("best_model.h5")
-
 Y_v = model.predict(x_validate)
 
 
@@ -133,18 +129,14 @@ def make_model2(input_shape):
 
     return tf.keras.models.Model(inputs=input_layer, outputs=output_layer)
 
-epochs = 10
-batch_size = 32
+epochs = 100
+batch_size = 10
 
 model = make_model2(input_shape=x_train.shape[1:])
 callbacks = [
-    tf.keras.callbacks.ModelCheckpoint(
-        "best_model.h5", save_best_only=True, monitor="val_loss"
-    ),
     tf.keras.callbacks.ReduceLROnPlateau(
         monitor="val_loss", factor=0.5, patience=20, min_lr=0.0001
     ),
-    tf.keras.callbacks.EarlyStopping(monitor="val_loss", patience=50, verbose=1),
 ]
 model.compile(
     optimizer="adam",
@@ -162,7 +154,6 @@ history = model.fit(
     verbose=1,
 )
 
-model = tf.keras.models.load_model("best_model.h5")
 
 Y_v = model.predict(x_validate)
 
@@ -173,16 +164,16 @@ Y_v = model.predict(x_validate)
 
 print("Cross-entropy diff: ", np.log(ce_score(Y_v, Y_validate)) - np.log(low_perp))
 
-print("Boosted cascade")
-model = CascadeSequentialClassifier(C=1.0, n_layers=5, verbose=2, n_estimators = 4, max_depth=5,max_features='sqrt')#, n_iter_no_change = 1, validation_fraction = 0.1)
-
-model.fit(x_train, Y_train)#, monitor = monitor)
-
-Y_v = model.predict(x_validate)
-
-
-print(
-    f"Boosted Cascade Classification report:\n"
-    f"{metrics.classification_report(Y_validate.flatten(), Y_v.flatten())}\n")
-
-print("Cross-entropy diff: ", np.log(ce_score(Y_v, Y_validate)) - np.log(low_perp))
+# print("Boosted cascade")
+# model = CascadeSequentialClassifier(C=1.0, n_layers=5, verbose=2, n_estimators = 4, max_depth=5,max_features='sqrt')#, n_iter_no_change = 1, validation_fraction = 0.1)
+# 
+# model.fit(x_train, Y_train)#, monitor = monitor)
+# 
+# Y_v = model.predict(x_validate)
+# 
+# 
+# print(
+#     f"Boosted Cascade Classification report:\n"
+#     f"{metrics.classification_report(Y_validate.flatten(), Y_v.flatten())}\n")
+# 
+# print("Cross-entropy diff: ", np.log(ce_score(Y_v, Y_validate)) - np.log(low_perp))
