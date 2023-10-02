@@ -60,9 +60,15 @@ low_perp = compute_lower_bound_perplexity(sampler, parser, 1, X)
 
 #X = polyndrome(16)
 
+
+X_ = np.zeros((X.shape[0], X.shape[1], 2))
+X_[X == 1,1] = 1.
+X_[X == 0,0] = 1. 
+    
+X = X_
+
 y = X[:,1:]
 X = X[:,:-1] 
-X = X.reshape(X.shape[0],X.shape[1],1)
 
 print("Dataset: ", X.shape[0],X.shape[1])
 
@@ -74,10 +80,10 @@ def sigmoid(x):
     return 1. / (1 + np.exp(-x))
 
 def ce_score(logits, labels):
-    labels_ = np.zeros((labels.shape[0], labels.shape[1], 2))
-    labels_[labels == 1,1] = 1.
-    labels_[labels == 0,0] = 1.                    
-    ce = log_loss(labels_.reshape(-1,2),logits.reshape(-1,2),normalize=False)
+    #labels_ = np.zeros((labels.shape[0], labels.shape[1], 2))
+    #labels_[labels == 1,1] = 1.
+    #labels_[labels == 0,0] = 1.                    
+    ce = log_loss(labels.reshape(-1,2),logits.reshape(-1,2),normalize=False)
     return  np.exp(ce / (labels.shape[1] * labels.shape[0]))  
 
 def make_model(input_shape):
@@ -87,19 +93,15 @@ def make_model(input_shape):
 
     return tf.keras.models.Model(inputs=input_layer, outputs=output_layer)
 
-epochs = 100
+epochs = 200
 batch_size = 10
 
 model = make_model(input_shape=x_train.shape[1:])
-callbacks = [
-    tf.keras.callbacks.ReduceLROnPlateau(
-        monitor="val_loss", factor=0.5, patience=20, min_lr=0.0001
-    ),
-]
+
 model.compile(
     optimizer="adam",
-    loss="sparse_categorical_crossentropy",
-    metrics=["sparse_categorical_accuracy"],
+    loss="categorical_crossentropy",
+    metrics=["categorical_accuracy"],
 )
 
 print("Simple RNN")
@@ -108,7 +110,6 @@ history = model.fit(
     Y_train,
     batch_size=batch_size,
     epochs=epochs,
-    callbacks=callbacks,
     validation_split=0.2,
     verbose=1,
 )
@@ -129,19 +130,15 @@ def make_model2(input_shape):
 
     return tf.keras.models.Model(inputs=input_layer, outputs=output_layer)
 
-epochs = 100
+epochs = 200
 batch_size = 10
 
 model = make_model2(input_shape=x_train.shape[1:])
-callbacks = [
-    tf.keras.callbacks.ReduceLROnPlateau(
-        monitor="val_loss", factor=0.5, patience=20, min_lr=0.0001
-    ),
-]
+
 model.compile(
     optimizer="adam",
-    loss="sparse_categorical_crossentropy",
-    metrics=["sparse_categorical_accuracy"],
+    loss="categorical_crossentropy",
+    metrics=["categorical_accuracy"],
 )
 print("LSTM")
 history = model.fit(
@@ -149,7 +146,6 @@ history = model.fit(
     Y_train,
     batch_size=batch_size,
     epochs=epochs,
-    callbacks=callbacks,
     validation_split=0.2,
     verbose=1,
 )
