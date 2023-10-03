@@ -41,135 +41,149 @@ def polyndrome(n):
     return np.vstack(grids) 
 
 
-#for str_len in []
-grammar = UnmarkedReversalGrammar(2,20)
-remove_epsilon_rules(grammar)
-remove_unary_rules(grammar)
-
-
-sampler = LengthSampler(grammar)
-generator = random.Random()
-
-X = np.asarray([list(sampler.sample(20, generator))
-        for i in range(10000)])  
-
-
-parser = Parser(grammar)
-low_perp = compute_lower_bound_perplexity(sampler, parser, 1, X)   
-    
-
-#X = polyndrome(16)
-
-
-X_ = np.zeros((X.shape[0], X.shape[1], 2))
-X_[X == 1,1] = 1.
-X_[X == 0,0] = 1. 
-    
-X = X_
-
-y = X[:,1:]
-X = X[:,:-1] 
-
-print("Dataset: ", X.shape[0],X.shape[1])
-
-x_train, x_validate, Y_train, Y_validate = train_test_split(
-    X, y, test_size=0.5, shuffle=True
-)
-
-def sigmoid(x):
-    return 1. / (1 + np.exp(-x))
-
-def ce_score(logits, labels):
-    #labels_ = np.zeros((labels.shape[0], labels.shape[1], 2))
-    #labels_[labels == 1,1] = 1.
-    #labels_[labels == 0,0] = 1.                    
-    ce = log_loss(labels.reshape(-1,2),logits.reshape(-1,2),normalize=False)
-    return  np.exp(ce / (labels.shape[1] * labels.shape[0]))  
-
-def make_model(input_shape):
-    input_layer = tf.keras.layers.Input(input_shape)
-    output_layer = tf.keras.layers.SimpleRNN(20, return_sequences=True)(input_layer)
-    output_layer = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(2))(output_layer)
-
-    return tf.keras.models.Model(inputs=input_layer, outputs=output_layer)
-
-epochs = 200
-batch_size = 10
-
-model = make_model(input_shape=x_train.shape[1:])
-
-model.compile(
-    optimizer="adam",
-    loss="categorical_crossentropy",
-    metrics=["categorical_accuracy"],
-)
-
-print("Simple RNN")
-history = model.fit(
-    x_train,
-    Y_train,
-    batch_size=batch_size,
-    epochs=epochs,
-    validation_split=0.2,
-    verbose=1,
-)
-
-Y_v = model.predict(x_validate)
-
-
-#print(
-#    f"Boosted Cascade Classification report:\n"
-#    f"{metrics.classification_report(Y_validate.flatten(), Y_v.flatten())}\n")
-
-print("Cross-entropy diff: ", np.log(ce_score(Y_v, Y_validate)) - np.log(low_perp))
-
-def make_model2(input_shape):
-    input_layer = tf.keras.layers.Input(input_shape)
-    output_layer = tf.keras.layers.LSTM(20, return_sequences=True)(input_layer)
-    output_layer = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(2))(output_layer)    
-
-    return tf.keras.models.Model(inputs=input_layer, outputs=output_layer)
-
-epochs = 200
-batch_size = 10
-
-model = make_model2(input_shape=x_train.shape[1:])
-
-model.compile(
-    optimizer="adam",
-    loss="categorical_crossentropy",
-    metrics=["categorical_accuracy"],
-)
-print("LSTM")
-history = model.fit(
-    x_train,
-    Y_train,
-    batch_size=batch_size,
-    epochs=epochs,
-    validation_split=0.2,
-    verbose=1,
-)
-
-
-Y_v = model.predict(x_validate)
-
-
-#print(
-#    f"Boosted Cascade Classification report:\n"
-#    f"{metrics.classification_report(Y_validate.flatten(), Y_v.flatten())}\n")
-
-print("Cross-entropy diff: ", np.log(ce_score(Y_v, Y_validate)) - np.log(low_perp))
-
-# print("Boosted cascade")
-# model = CascadeSequentialClassifier(C=1.0, n_layers=5, verbose=2, n_estimators = 4, max_depth=5,max_features='sqrt')#, n_iter_no_change = 1, validation_fraction = 0.1)
-# 
-# model.fit(x_train, Y_train)#, monitor = monitor)
-# 
-# Y_v = model.predict(x_validate)
-# 
-# 
-# print(
-#     f"Boosted Cascade Classification report:\n"
-#     f"{metrics.classification_report(Y_validate.flatten(), Y_v.flatten())}\n")
-# 
-# print("Cross-entropy diff: ", np.log(ce_score(Y_v, Y_validate)) - np.log(low_perp))
+simple_rnn_data = []
+lstm_data = []
+for str_len in [20, 40, 60, 80, 100]:
+    for _ in range(5):
+        grammar = UnmarkedReversalGrammar(2,str_len)
+        remove_epsilon_rules(grammar)
+        remove_unary_rules(grammar)
+        
+        
+        sampler = LengthSampler(grammar)
+        generator = random.Random()
+        
+        X = np.asarray([list(sampler.sample(str_len, generator))
+                for i in range(10000)])  
+        
+        
+        parser = Parser(grammar)
+        low_perp = compute_lower_bound_perplexity(sampler, parser, 1, X)   
+            
+        
+        #X = polyndrome(16)
+        
+        
+        X_ = np.zeros((X.shape[0], X.shape[1], 2))
+        X_[X == 1,1] = 1.
+        X_[X == 0,0] = 1. 
+            
+        X = X_
+        
+        y = X[:,1:]
+        X = X[:,:-1] 
+        
+        print("Dataset: ", X.shape[0],X.shape[1])
+        
+        x_train, x_validate, Y_train, Y_validate = train_test_split(
+            X, y, test_size=0.5, shuffle=True
+        )
+        
+        def sigmoid(x):
+            return 1. / (1 + np.exp(-x))
+        
+        def ce_score(logits, labels):
+            #labels_ = np.zeros((labels.shape[0], labels.shape[1], 2))
+            #labels_[labels == 1,1] = 1.
+            #labels_[labels == 0,0] = 1.                    
+            ce = log_loss(labels.reshape(-1,2),logits.reshape(-1,2),normalize=False)
+            return  np.exp(ce / (labels.shape[1] * labels.shape[0]))  
+        
+        def make_model(input_shape):
+            input_layer = tf.keras.layers.Input(input_shape)
+            initial_state = tf.keras.layers.Input((str_len,))
+            output_layer = tf.keras.layers.SimpleRNN(str_len, return_sequences=True)(input_layer, initial_state=initial_state)
+            output_layer2 = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(2))(output_layer)
+        
+            return tf.keras.models.Model(inputs=[input_layer] + [initial_state], outputs=output_layer2)
+        
+        epochs = 200
+        batch_size = 10
+        
+        model = make_model(input_shape=x_train.shape[1:])
+        
+        model.compile(
+            optimizer="adam",
+            loss="categorical_crossentropy",
+            metrics=["categorical_accuracy"],
+        )
+        
+        some_initial_state = np.zeros((x_train.shape[0], str_len))
+        test_initial_state = np.zeros((x_validate.shape[0], str_len))
+        
+        print("Simple RNN")
+        history = model.fit(
+            [x_train] + [some_initial_state],
+            Y_train,
+            batch_size=batch_size,
+            epochs=epochs,
+            validation_split=0.2,
+            verbose=0,
+        )
+        
+        Y_v = model.predict([x_validate] + [test_initial_state])
+        
+        
+        #print(
+        #    f"Boosted Cascade Classification report:\n"
+        #    f"{metrics.classification_report(Y_validate.flatten(), Y_v.flatten())}\n")
+        
+        simple_rnn_data.append((str_len, np.log(ce_score(Y_v, Y_validate)) - np.log(low_perp)))
+        
+        def make_model2(input_shape):
+            input_layer = tf.keras.layers.Input(input_shape)
+            dim = tf.zeros([10,str_len])  
+            output_layer = tf.keras.layers.LSTM(str_len, return_sequences=True)(input_layer, initial_state=[dim, dim])
+            output_layer2 = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(2))(output_layer)    
+        
+            return tf.keras.models.Model(inputs=input_layer, outputs=output_layer2)
+        
+        epochs = 200
+        batch_size = 10
+        
+        some_initial_state = np.zeros((x_train.shape[0], X.shape[1], 20))
+        test_initial_state = np.zeros((x_validate.shape[0], X.shape[1], 20))
+        
+        model = make_model2(input_shape=x_train.shape[1:])
+        
+        model.compile(
+            optimizer="adam",
+            loss="categorical_crossentropy",
+            metrics=["categorical_accuracy"],
+        )
+        print("LSTM")
+        history = model.fit(
+            x_train,
+            Y_train,
+            batch_size=batch_size,
+            epochs=epochs,
+            validation_split=0.2,
+            verbose=0,
+        )
+        
+        Y_v = model.predict(x_validate, batch_size=10)
+        
+        
+        #print(
+        #    f"Boosted Cascade Classification report:\n"
+        #    f"{metrics.classification_report(Y_validate.flatten(), Y_v.flatten())}\n")
+        
+        lstm_data.append((str_len, np.log(ce_score(Y_v, Y_validate)) - np.log(low_perp)))
+        
+        # print("Boosted cascade")
+        # model = CascadeSequentialClassifier(C=1.0, n_layers=5, verbose=2, n_estimators = 4, max_depth=5,max_features='sqrt')#, n_iter_no_change = 1, validation_fraction = 0.1)
+        # 
+        # model.fit(x_train, Y_train)#, monitor = monitor)
+        # 
+        # Y_v = model.predict(x_validate)
+        # 
+        # 
+        # print(
+        #     f"Boosted Cascade Classification report:\n"
+        #     f"{metrics.classification_report(Y_validate.flatten(), Y_v.flatten())}\n")
+        # 
+        # print("Cross-entropy diff: ", np.log(ce_score(Y_v, Y_validate)) - np.log(low_perp))
+        
+        
+print (simple_rnn_data)
+print (lstm_data)
