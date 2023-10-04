@@ -100,7 +100,7 @@ class KFoldWrapper(object):
                 X, y, sample_weight
             )
             
-        history = self.update_terminal_regions(estimator, X, y_, raw_predictions, rp_old,sample_weight,0, k) 
+        history = self.update_terminal_regions(estimator, X, y_, raw_predictions, rp_old,sample_weight, k) 
         
         self.estimators_.append(estimator)
         return history  
@@ -137,23 +137,23 @@ class KFoldWrapper(object):
         return np.hstack(Is)            
                     
 
-    def update_terminal_regions(self,e, X, y,raw_predictions, rp_old, sample_weight, i, k):
+    def update_terminal_regions(self,e, X, y,raw_predictions, rp_old, sample_weight, k):
         bias = rp_old[:,k]
         self.lr.append(LogisticRegression(C=self.C,
                                 fit_intercept=False,
                                 solver='lbfgs',
-                                max_iter=100,
+                                max_iter=1000,
                                 multi_class='ovr', n_jobs=-1))            
         
         I = self.getIndicators(e, X, False)
   
-        self.lr[i].fit(I, y.flatten(), bias = bias, sample_weight = sample_weight)
+        self.lr[0].fit(I, y.flatten(), bias = bias, sample_weight = sample_weight)
         I = self.getIndicators(e, X,True)
         if len(raw_predictions.shape) == 2:
-            history = self.factor*self.lr[i].decision_function(I)
+            history = self.factor*self.lr[0].decision_function(I)
             raw_predictions[:,k] += history
         else:
-            history = self.factor*self.lr[i].decision_function(I).reshape(raw_predictions.shape[0],raw_predictions.shape[1])
+            history = self.factor*self.lr[0].decision_function(I).reshape(raw_predictions.shape[0],raw_predictions.shape[1])
             raw_predictions[:,:,k] += history
         return history    
                  

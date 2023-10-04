@@ -257,7 +257,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         else:
             K = loss.n_classes
         
-        alpha = 0.1
+        alpha = 1.0
         for t in reversed(range(0,X.shape[1])):
             #dummy loss
             neg_grad = - loss.gradient(
@@ -267,7 +267,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
             if not self.dummy_loss and i > 0 and t < X.shape[1]-1:
                 if K > 1: 
                     for k in range(K):
-                        neg_grad[:,k] -= alpha*np.multiply(history[:,t + 1,k], residual[:,t + 1])
+                        #neg_grad[:,k] -= alpha*np.multiply(history[:,t + 1,k], residual[:,t + 1])
                         for t2 in range(t + 1,X.shape[1]):
                             h = np.ones(shape=(history.shape[0],))
                             for t3 in range(t + 1,t2 + 1):
@@ -351,7 +351,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         X = self._bin_data(self.binners[0], X, False)
         self._check_initialized()
         raw = np.zeros(
-             shape=(X.shape[0], X.shape[1], 1), dtype=np.float64
+             shape=(X.shape[0], X.shape[1], 2), dtype=np.float64
          )
         
         if isinstance(X,np.ndarray):

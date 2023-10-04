@@ -54,7 +54,7 @@ sampler = LengthSampler(grammar)
 generator = random.Random()
 
 X = np.asarray([list(sampler.sample(str_len, generator))
-        for i in range(10000)])  
+        for i in range(1000)])  
 
 
 parser = Parser(grammar)
@@ -187,7 +187,7 @@ print(
     f"Boosted Cascade Classification report:\n"
     f"{metrics.classification_report(Y_validate.flatten(), Y_v.flatten())}\n")
 
-print("Cross-entropy diff: ", np.log(ce_score(Y_v, Y_validate)) - np.log(low_perp))
+print("Cross-entropy diff: ", np.log(ce_score(sigmoid(Y_v), Y_validate)) - np.log(low_perp))
 
 
 #print (simple_rnn_data)
