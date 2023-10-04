@@ -143,7 +143,7 @@ class KFoldWrapper(object):
                                 fit_intercept=False,
                                 solver='lbfgs',
                                 max_iter=100,
-                                multi_class='ovr', n_jobs=1))            
+                                multi_class='ovr', n_jobs=-1))            
         
         I = self.getIndicators(e, X, False)
   
