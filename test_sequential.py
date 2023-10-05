@@ -43,7 +43,7 @@ def polyndrome(n):
 
 simple_rnn_data = []
 lstm_data = []
-str_len = 20# in [20, 40, 60, 80, 100]:
+str_len = 10# in [20, 40, 60, 80, 100]:
 #    for _ in range(5):
 grammar = UnmarkedReversalGrammar(2,str_len)
 remove_epsilon_rules(grammar)
@@ -93,8 +93,8 @@ def ce_score(logits, labels):
 
 def make_model(input_shape):
     input_layer = tf.keras.layers.Input(input_shape)
-    initial_state = tf.keras.layers.Input((str_len,))
-    output_layer = tf.keras.layers.SimpleRNN(str_len, return_sequences=True)(input_layer, initial_state=initial_state)
+    initial_state = tf.keras.layers.Input((2,))
+    output_layer = tf.keras.layers.SimpleRNN(2, return_sequences=True)(input_layer, initial_state=initial_state)
     output_layer2 = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(2, activation='softmax'))(output_layer)
 
     return tf.keras.models.Model(inputs=[input_layer] + [initial_state], outputs=output_layer2)
@@ -110,8 +110,8 @@ model.compile(
     metrics=["sparse_categorical_accuracy"],
 )
 
-some_initial_state = np.zeros((x_train.shape[0], str_len))
-test_initial_state = np.zeros((x_validate.shape[0], str_len))
+some_initial_state = np.zeros((x_train.shape[0], 2))
+test_initial_state = np.zeros((x_validate.shape[0], 2))
 
 print("Simple RNN")
 history = model.fit(
@@ -136,8 +136,8 @@ print(simple_rnn_data)
 
 def make_model2(input_shape):
     input_layer = tf.keras.layers.Input(input_shape)
-    dim = tf.zeros([10,str_len])  
-    output_layer = tf.keras.layers.LSTM(str_len, return_sequences=True)(input_layer, initial_state=[dim, dim])
+    dim = tf.zeros([10,2])  
+    output_layer = tf.keras.layers.LSTM(2, return_sequences=True)(input_layer, initial_state=[dim, dim])
     output_layer2 = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(2, activation='softmax'))(output_layer)    
 
     return tf.keras.models.Model(inputs=input_layer, outputs=output_layer2)
@@ -180,14 +180,12 @@ model = CascadeSequentialClassifier(C=1.0, n_layers=5, verbose=2, n_estimators =
 
 model.fit(x_train, Y_train)#, monitor = monitor)
  
-Y_v = model.predict(x_validate)
+Y_v = model.predict_proba(x_validate)
+Y_vp = sigmoid(Y_v)
+Y_vp = np.concatenate([Y_vp, 1. -Y_vp], axis=2)
 # 
 # 
-print(
-    f"Boosted Cascade Classification report:\n"
-    f"{metrics.classification_report(Y_validate.flatten(), Y_v.flatten())}\n")
-
-print("Cross-entropy diff: ", np.log(ce_score(sigmoid(Y_v), Y_validate)) - np.log(low_perp))
+print("Cross-entropy diff: ", np.log(ce_score(Y_vp, Y_validate)) - np.log(low_perp))
 
 
 #print (simple_rnn_data)

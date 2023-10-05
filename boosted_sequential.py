@@ -65,8 +65,8 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         
 
         def ce_score(logits, labels):
-            ce = log_loss(labels.flatten(),sigmoid(logits.reshape(-1, 1)))
-            return  np.exp(ce / labels.shape[1])         
+            ce = log_loss(labels.flatten(),sigmoid(logits.reshape(-1, 1)), normalize=False)
+            return  np.exp(ce / (labels.shape[1] * labels.shape[0]))         
           
 
         binner_ = Binner(
@@ -101,7 +101,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         # perform boosting iterations
         i = begin_at_stage
         
-        history = np.zeros(raw_predictions.shape)
+        history = raw_predictions.copy()
 
         for i in range(begin_at_stage, self.n_layers):
             # subsampling
@@ -212,7 +212,8 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
             max_features=self.max_features,
             max_leaf_nodes=self.max_leaf_nodes,
             ccp_alpha=self.ccp_alpha,
-            n_estimators=100*(i+1)
+            n_estimators=100,
+            n_jobs=-1
         )  
         
         restimator = ExtraTreesRegressor(
@@ -225,7 +226,8 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
             max_features=self.max_features,
             max_leaf_nodes=self.max_leaf_nodes,
             ccp_alpha=self.ccp_alpha,
-            n_estimators=100*(i+1)
+            n_estimators=100,
+            n_jobs=-1
         )        
 
         # Need to pass a copy of raw_predictions to negative_gradient()
@@ -242,8 +244,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         
         self.binners.append(binner_)      
         
-        rp_old = raw_predictions.copy()
-        rp_old_bin = self._bin_data(binner_, rp_old, is_training_data=True)       
+        rp_old_bin = self._bin_data(binner_, raw_predictions_copy, is_training_data=True)       
         
         if loss.n_classes == 2:
             residual = np.zeros((X.shape[0],X.shape[1], 1))
@@ -264,7 +265,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                 y[:,t].copy(order='C'), raw_predictions_copy[:,t].copy(order='C') 
             )
             
-            if not self.dummy_loss and i > 0 and t < X.shape[1]-1:
+            if not self.dummy_loss  and t < X.shape[1]-1:
                 if K > 1: 
                     for k in range(K):
                         #neg_grad[:,k] -= alpha*np.multiply(history[:,t + 1,k], residual[:,t + 1])
@@ -275,17 +276,15 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                             next_grad = - loss.gradient(
                                 y[:,t2].copy(order='C'), raw_predictions_copy[:,t2].copy(order='C') 
                             )   
-                            neg_grad[:,k] -= alpha*np.multiply(h,next_grad[:,k].flatten())                        
+                            neg_grad[:,k] += alpha*np.multiply(h,next_grad[:,k].flatten())                        
                 else:  
-
+                    h = np.ones(shape=(history.shape[0],))
                     for t2 in range(t + 1,X.shape[1]):
-                        h = np.ones(shape=(history.shape[0],))
-                        for t3 in range(t + 1,t2 + 1):
-                            h = np.multiply(h,history[:,t3, 0])
+                        h = np.multiply(h,history[:,t2, 0])
                         next_grad = - loss.gradient(
                             y[:,t2].copy(order='C'), raw_predictions_copy[:,t2].copy(order='C') 
                         )   
-                        neg_grad -= alpha*np.multiply(h,next_grad.flatten())
+                        neg_grad += alpha*np.multiply(h,next_grad.flatten())
             
             if loss.n_classes == 2:
                 neg_grad = neg_grad.reshape(-1,1)
@@ -337,7 +336,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                         self.verbose
                     )                       
                  
-                history[:,:,k] += kfold_estimator.fit(X_aug.reshape(-1,X_aug.shape[2]), residual[:,:, k].reshape(-1,1), y, raw_predictions, rp_old.reshape(-1,residual.shape[2]), k, sample_weight)
+                history[:,:,k] += kfold_estimator.fit(X_aug.reshape(-1,X_aug.shape[2]), residual[:,:, k].reshape(-1,1), y, raw_predictions, raw_predictions_copy.reshape(-1,residual.shape[2]), k, sample_weight)
                 #kfold_estimator.update_terminal_regions(X_aug, y, raw_predictions, k)
                 self.estimators_[i, k].append(kfold_estimator)
                     
@@ -545,7 +544,7 @@ class CascadeSequentialClassifier(ClassifierMixin, BaseSequentialBoostingDummy):
     def predict_proba(self, X):
         raw_predictions = self.decision_function(X)
         try:
-            return self._loss._raw_prediction_to_proba(raw_predictions)
+            return raw_predictions
         except NotFittedError:
             raise
         except AttributeError as e:
