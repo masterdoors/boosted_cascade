@@ -43,7 +43,7 @@ def polyndrome(n):
 
 simple_rnn_data = []
 lstm_data = []
-str_len = 10# in [20, 40, 60, 80, 100]:
+str_len = 4# in [20, 40, 60, 80, 100]:
 #    for _ in range(5):
 grammar = UnmarkedReversalGrammar(2,str_len)
 remove_epsilon_rules(grammar)
@@ -54,7 +54,7 @@ sampler = LengthSampler(grammar)
 generator = random.Random()
 
 X = np.asarray([list(sampler.sample(str_len, generator))
-        for i in range(1000)])  
+        for i in range(2000)])  
 
 
 parser = Parser(grammar)
@@ -93,8 +93,8 @@ def ce_score(logits, labels):
 
 def make_model(input_shape):
     input_layer = tf.keras.layers.Input(input_shape)
-    initial_state = tf.keras.layers.Input((2,))
-    output_layer = tf.keras.layers.SimpleRNN(2, return_sequences=True)(input_layer, initial_state=initial_state)
+    initial_state = tf.keras.layers.Input((1,))
+    output_layer = tf.keras.layers.SimpleRNN(1, return_sequences=True)(input_layer, initial_state=initial_state)
     output_layer2 = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(2, activation='softmax'))(output_layer)
 
     return tf.keras.models.Model(inputs=[input_layer] + [initial_state], outputs=output_layer2)
@@ -110,8 +110,8 @@ model.compile(
     metrics=["sparse_categorical_accuracy"],
 )
 
-some_initial_state = np.zeros((x_train.shape[0], 2))
-test_initial_state = np.zeros((x_validate.shape[0], 2))
+some_initial_state = np.zeros((x_train.shape[0], 1))
+test_initial_state = np.zeros((x_validate.shape[0], 1))
 
 print("Simple RNN")
 history = model.fit(
@@ -126,27 +126,27 @@ history = model.fit(
 Y_v = model.predict([x_validate] + [test_initial_state])
 
 
-#print(
-#    f"Boosted Cascade Classification report:\n"
-#    f"{metrics.classification_report(Y_validate.flatten(), Y_v.flatten())}\n")
+Y_v_labels = Y_v.argmax(axis=2)
+
+print(
+    f"Boosted Cascade Classification report:\n"
+    f"{metrics.classification_report(Y_validate.flatten(), Y_v_labels.flatten())}\n")
 
 simple_rnn_data.append((str_len, np.log(ce_score(Y_v, Y_validate)) - np.log(low_perp)))
+
 
 print(simple_rnn_data)
 
 def make_model2(input_shape):
     input_layer = tf.keras.layers.Input(input_shape)
-    dim = tf.zeros([10,2])  
-    output_layer = tf.keras.layers.LSTM(2, return_sequences=True)(input_layer, initial_state=[dim, dim])
+    dim = tf.zeros([10,1])  
+    output_layer = tf.keras.layers.LSTM(1, return_sequences=True)(input_layer, initial_state=[dim, dim])
     output_layer2 = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(2, activation='softmax'))(output_layer)    
 
     return tf.keras.models.Model(inputs=input_layer, outputs=output_layer2)
 
 epochs = 100
 batch_size = 10
-
-some_initial_state = np.zeros((x_train.shape[0], X.shape[1], 20))
-test_initial_state = np.zeros((x_validate.shape[0], X.shape[1], 20))
 
 model = make_model2(input_shape=x_train.shape[1:])
 
@@ -168,9 +168,11 @@ history = model.fit(
 Y_v = model.predict(x_validate, batch_size=10)
 
 
-#print(
-#    f"Boosted Cascade Classification report:\n"
-#    f"{metrics.classification_report(Y_validate.flatten(), Y_v.flatten())}\n")
+Y_v_labels = Y_v.argmax(axis=2)
+
+print(
+    f"Boosted Cascade Classification report:\n"
+    f"{metrics.classification_report(Y_validate.flatten(), Y_v_labels.flatten())}\n")
 
 lstm_data.append((str_len, np.log(ce_score(Y_v, Y_validate)) - np.log(low_perp)))
 print (lstm_data)
@@ -185,6 +187,13 @@ Y_vp = sigmoid(Y_v)
 Y_vp = np.concatenate([Y_vp, 1. -Y_vp], axis=2)
 # 
 # 
+
+Y_v_labels = Y_vp.argmax(axis=2)
+
+print(
+    f"Boosted Cascade Classification report:\n"
+    f"{metrics.classification_report(Y_validate.flatten(), Y_v_labels.flatten())}\n")
+
 print("Cross-entropy diff: ", np.log(ce_score(Y_vp, Y_validate)) - np.log(low_perp))
 
 
