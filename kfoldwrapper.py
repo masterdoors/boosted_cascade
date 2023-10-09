@@ -142,13 +142,13 @@ class KFoldWrapper(object):
         self.lr.append(LogisticRegression(C=self.C,
                                 fit_intercept=False,
                                 solver='lbfgs',
-                                max_iter=1000,
+                                max_iter=100000,
                                 multi_class='ovr', n_jobs=-1))            
         
-        I = self.getIndicators(e, X, False)
+        I = self.getIndicators(e, X, True)#False)
   
         self.lr[0].fit(I, y.flatten(), bias = bias, sample_weight = sample_weight)
-        I = self.getIndicators(e, X,True)
+        I = self.getIndicators(e, X, False)#, False)
         if len(raw_predictions.shape) == 2:
             history = self.factor*self.lr[0].decision_function(I)
             raw_predictions[:,k] += history

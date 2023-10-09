@@ -65,13 +65,13 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         
 
         def ce_score(logits, labels):
-            labels_ = np.zeros((labels.shape[0], labels.shape[1], 2))            
-            labels_[labels == 1,1] = 1.
-            labels_[labels == 0,0] = 1.     
-            logits_ = sigmoid(logits)
-            logits_ = np.concatenate([logits_, 1. -logits_], axis=2)         
-            ce = log_loss(labels_.reshape(-1,2),logits_.reshape(-1, 2), normalize=False)
-            return  np.exp(ce / (labels.shape[1] * labels.shape[0]))         
+            #labels_ = np.zeros((labels.shape[0], labels.shape[1], 2))            
+            #labels_[labels == 1,1] = 1.
+            #labels_[labels == 0,0] = 1.     
+            #logits_ = sigmoid(logits)
+            #logits_ = np.concatenate([logits_, 1. -logits_], axis=2)         
+            ce =np.log(1 + np.exp(logits.flatten())) - labels.flatten() * logits.flatten()
+            return  ce.mean()#np.exp(ce).mean()         
           
 
         binner_ = Binner(

@@ -43,7 +43,7 @@ def polyndrome(n):
 
 simple_rnn_data = []
 lstm_data = []
-str_len = 4# in [20, 40, 60, 80, 100]:
+str_len = 10# in [20, 40, 60, 80, 100]:
 #    for _ in range(5):
 grammar = UnmarkedReversalGrammar(2,str_len)
 remove_epsilon_rules(grammar)
@@ -53,15 +53,16 @@ remove_unary_rules(grammar)
 sampler = LengthSampler(grammar)
 generator = random.Random()
 
-X = np.asarray([list(sampler.sample(str_len, generator))
-        for i in range(2000)])  
+#X = np.asarray([list(sampler.sample(str_len, generator))
+#        for i in range(16)])
+X = polyndrome(5)  
 
 
 parser = Parser(grammar)
 low_perp = compute_lower_bound_perplexity(sampler, parser, 1, X)   
     
 
-#X = polyndrome(16)
+
 
 
 X_ = np.zeros((X.shape[0], X.shape[1], 2))
@@ -81,6 +82,14 @@ x_train, x_validate, Y_train, Y_validate = train_test_split(
     X, y, test_size=0.5, shuffle=True
 )
 
+#print(Y_train)
+#print(Y_validate)
+
+for y_ in Y_train:
+    for y__ in Y_validate:
+        if not np.logical_xor(y_, y__).sum():
+            print(y_, y__)
+
 def sigmoid(x):
     return 1. / (1 + np.exp(-x))
 
@@ -91,16 +100,25 @@ def ce_score(logits, labels):
     ce = log_loss(labels_.reshape(-1,2),logits.reshape(-1,2),normalize=False)
     return  np.exp(ce / (labels.shape[1] * labels.shape[0]))  
 
+def ce_score2(logits, labels):
+    #labels_ = np.zeros((labels.shape[0], labels.shape[1], 2))            
+    #labels_[labels == 1,1] = 1.
+    #labels_[labels == 0,0] = 1.     
+    #logits_ = sigmoid(logits)
+    #logits_ = np.concatenate([logits_, 1. -logits_], axis=2)         
+    ce =np.log(1 + np.exp(logits.flatten())) - labels.flatten() * logits.flatten()
+    return  ce.mean()#np.exp(ce).mean()  
+
 def make_model(input_shape):
     input_layer = tf.keras.layers.Input(input_shape)
-    initial_state = tf.keras.layers.Input((1,))
-    output_layer = tf.keras.layers.SimpleRNN(1, return_sequences=True)(input_layer, initial_state=initial_state)
+    initial_state = tf.keras.layers.Input((2,))
+    output_layer = tf.keras.layers.SimpleRNN(2, return_sequences=True)(input_layer, initial_state=initial_state)
     output_layer2 = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(2, activation='softmax'))(output_layer)
 
     return tf.keras.models.Model(inputs=[input_layer] + [initial_state], outputs=output_layer2)
 
 epochs = 100
-batch_size = 10
+batch_size = 5
 
 model = make_model(input_shape=x_train.shape[1:])
 
@@ -110,8 +128,8 @@ model.compile(
     metrics=["sparse_categorical_accuracy"],
 )
 
-some_initial_state = np.zeros((x_train.shape[0], 1))
-test_initial_state = np.zeros((x_validate.shape[0], 1))
+some_initial_state = np.zeros((x_train.shape[0], 2))
+test_initial_state = np.zeros((x_validate.shape[0], 2))
 
 print("Simple RNN")
 history = model.fit(
@@ -119,7 +137,6 @@ history = model.fit(
     Y_train,
     batch_size=batch_size,
     epochs=epochs,
-    validation_split=0.2,
     verbose=0,
 )
 
@@ -139,14 +156,14 @@ print(simple_rnn_data)
 
 def make_model2(input_shape):
     input_layer = tf.keras.layers.Input(input_shape)
-    dim = tf.zeros([10,1])  
-    output_layer = tf.keras.layers.LSTM(1, return_sequences=True)(input_layer, initial_state=[dim, dim])
+    dim = tf.zeros([5,2])  
+    output_layer = tf.keras.layers.LSTM(2, return_sequences=True)(input_layer, initial_state=[dim, dim])
     output_layer2 = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(2, activation='softmax'))(output_layer)    
 
     return tf.keras.models.Model(inputs=input_layer, outputs=output_layer2)
 
 epochs = 100
-batch_size = 10
+batch_size = 5
 
 model = make_model2(input_shape=x_train.shape[1:])
 
@@ -161,11 +178,10 @@ history = model.fit(
     Y_train,
     batch_size=batch_size,
     epochs=epochs,
-    validation_split=0.2,
     verbose=0,
 )
 
-Y_v = model.predict(x_validate, batch_size=10)
+Y_v = model.predict(x_validate, batch_size=5)
 
 
 Y_v_labels = Y_v.argmax(axis=2)
@@ -178,23 +194,22 @@ lstm_data.append((str_len, np.log(ce_score(Y_v, Y_validate)) - np.log(low_perp))
 print (lstm_data)
 
 print("Boosted cascade")
-model = CascadeSequentialClassifier(C=1.0, n_layers=5, verbose=2, n_estimators = 4, max_depth=5,max_features='sqrt')#, n_iter_no_change = 1, validation_fraction = 0.1)
+model = CascadeSequentialClassifier(C=0.01, n_layers=3, verbose=2, n_estimators = 4, max_depth=3,max_features='sqrt')#, n_iter_no_change = 1, validation_fraction = 0.1)
 
 model.fit(x_train, Y_train)#, monitor = monitor)
  
 Y_v = model.predict_proba(x_validate)
-Y_vp = sigmoid(Y_v)
-Y_vp = np.concatenate([Y_vp, 1. -Y_vp], axis=2)
+
 # 
 # 
 
-Y_v_labels = Y_vp.argmax(axis=2)
+Y_v_labels = (Y_v > 0.).astype(int)
 
 print(
     f"Boosted Cascade Classification report:\n"
     f"{metrics.classification_report(Y_validate.flatten(), Y_v_labels.flatten())}\n")
 
-print("Cross-entropy diff: ", np.log(ce_score(Y_vp, Y_validate)) - np.log(low_perp))
+print("Cross-entropy diff: ", ce_score2(Y_v, Y_validate) - np.log(low_perp))
 
 
 #print (simple_rnn_data)
