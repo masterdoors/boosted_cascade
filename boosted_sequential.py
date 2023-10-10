@@ -189,7 +189,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                 else:
                     break
           
-        self.n_layers = i
+        self.n_layers = i + 1
         return i + 1       
     
     def _fit_stage(
@@ -352,7 +352,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                     
     
                     # add tree to ensemble
-        history_sum += history                
+        history_sum[:,:,:] += history                
         return raw_predictions.reshape(raw_predictions_copy.shape)   
     
     def _raw_predict_init(self, X):
@@ -373,7 +373,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         return raw_predictions.reshape(X.shape[0],X.shape[1],-1)    
     
     def predict_stage(self, i, X, raw_predictions, history):
-        binned_history = self._bin_data(self.binners[i + 1], history.reshape(raw_predictions.shape[0], -1), False).reshape(history.shape)
+        binned_history = self._bin_data(self.binners[i + 1], history.reshape(raw_predictions.shape[0], -1), is_training_data = False).reshape(history.shape)
         new_raw_predictions = np.zeros(raw_predictions.shape)
         if self._loss.n_classes == 2:
             K = 1
@@ -396,7 +396,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                     h = estimator.predict(X_aug)    
                     history[:,t,eid,k] += h        
                     new_raw_predictions[:,t,k] += h 
-        raw_predictions += new_raw_predictions     
+        raw_predictions[:,:,:] += new_raw_predictions     
         
 class CascadeSequentialClassifier(ClassifierMixin, BaseSequentialBoostingDummy):
     _parameter_constraints: dict = {
