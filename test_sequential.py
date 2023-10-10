@@ -28,11 +28,14 @@ import random
 
 def polyndrome(n):
     grids = []
-    for k in range(1,n):
-        which = np.array(list(itertools.combinations(range(n), k)))
-        grid = np.zeros((len(which), 2*n), dtype="float")
+    for k in range(0,n + 1):
+        if k == 0:
+            grid = np.zeros((1, 2*n), dtype="float")
+        else:
+            which = np.array(list(itertools.combinations(range(n), k)))    
+            grid = np.zeros((len(which), 2*n), dtype="float")
         
-        grid[np.arange(len(which))[None].T, which] = 1
+            grid[np.arange(len(which))[None].T, which] = 1
         
         for i in range(grid.shape[0]):
             for j in range(grid.shape[1]):
@@ -43,7 +46,7 @@ def polyndrome(n):
 
 simple_rnn_data = []
 lstm_data = []
-str_len = 10# in [20, 40, 60, 80, 100]:
+str_len = 14# in [20, 40, 60, 80, 100]:
 #    for _ in range(5):
 grammar = UnmarkedReversalGrammar(2,str_len)
 remove_epsilon_rules(grammar)
@@ -55,7 +58,7 @@ generator = random.Random()
 
 #X = np.asarray([list(sampler.sample(str_len, generator))
 #        for i in range(16)])
-X = polyndrome(5)  
+X = polyndrome(7)  
 
 
 parser = Parser(grammar)
@@ -111,14 +114,14 @@ def ce_score2(logits, labels):
 
 def make_model(input_shape):
     input_layer = tf.keras.layers.Input(input_shape)
-    initial_state = tf.keras.layers.Input((2,))
-    output_layer = tf.keras.layers.SimpleRNN(2, return_sequences=True)(input_layer, initial_state=initial_state)
+    initial_state = tf.keras.layers.Input((4,))
+    output_layer = tf.keras.layers.SimpleRNN(4, return_sequences=True)(input_layer, initial_state=initial_state)
     output_layer2 = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(2, activation='softmax'))(output_layer)
 
     return tf.keras.models.Model(inputs=[input_layer] + [initial_state], outputs=output_layer2)
 
 epochs = 100
-batch_size = 5
+batch_size = 8
 
 model = make_model(input_shape=x_train.shape[1:])
 
@@ -128,8 +131,8 @@ model.compile(
     metrics=["sparse_categorical_accuracy"],
 )
 
-some_initial_state = np.zeros((x_train.shape[0], 2))
-test_initial_state = np.zeros((x_validate.shape[0], 2))
+some_initial_state = np.zeros((x_train.shape[0], 4))
+test_initial_state = np.zeros((x_validate.shape[0], 4))
 
 print("Simple RNN")
 history = model.fit(
@@ -156,14 +159,11 @@ print(simple_rnn_data)
 
 def make_model2(input_shape):
     input_layer = tf.keras.layers.Input(input_shape)
-    dim = tf.zeros([5,2])  
-    output_layer = tf.keras.layers.LSTM(2, return_sequences=True)(input_layer, initial_state=[dim, dim])
+    dim = tf.zeros([batch_size,4])  
+    output_layer = tf.keras.layers.LSTM(4, return_sequences=True)(input_layer, initial_state=[dim, dim])
     output_layer2 = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(2, activation='softmax'))(output_layer)    
 
     return tf.keras.models.Model(inputs=input_layer, outputs=output_layer2)
-
-epochs = 100
-batch_size = 5
 
 model = make_model2(input_shape=x_train.shape[1:])
 
@@ -181,7 +181,7 @@ history = model.fit(
     verbose=0,
 )
 
-Y_v = model.predict(x_validate, batch_size=5)
+Y_v = model.predict(x_validate, batch_size=batch_size)
 
 
 Y_v_labels = Y_v.argmax(axis=2)
@@ -194,7 +194,8 @@ lstm_data.append((str_len, np.log(ce_score(Y_v, Y_validate)) - np.log(low_perp))
 print (lstm_data)
 
 print("Boosted cascade")
-model = CascadeSequentialClassifier(C=0.01, n_layers=3, verbose=2, n_estimators = 4, max_depth=3,max_features='sqrt')#, n_iter_no_change = 1, validation_fraction = 0.1)
+model = CascadeSequentialClassifier(C=0.001, n_layers=3, verbose=2, n_estimators = 4, max_depth=3,max_features='sqrt')#, n_iter_no_change = 1, validation_fraction = 0.1)
+
 
 model.fit(x_train, Y_train)#, monitor = monitor)
  
@@ -203,7 +204,7 @@ Y_v = model.predict_proba(x_validate)
 # 
 # 
 
-Y_v_labels = (Y_v > 0.).astype(int)
+Y_v_labels = (Y_v >= 0.).astype(int)
 
 print(
     f"Boosted Cascade Classification report:\n"
@@ -211,6 +212,20 @@ print(
 
 print("Cross-entropy diff: ", ce_score2(Y_v, Y_validate) - np.log(low_perp))
 
+
+Y_v = model.predict_proba(x_train)
+
+# 
+# 
+
+Y_v_labels = (Y_v >= 0.).astype(int)
+
+print(
+    f"Boosted Cascade Classification report:\n"
+    f"{metrics.classification_report(Y_train.flatten(), Y_v_labels.flatten())}\n")
+
+print("Cross-entropy:", ce_score2(Y_v, Y_train))
+print("Cross-entropy diff: ", ce_score2(Y_v, Y_train) - np.log(low_perp))
 
 #print (simple_rnn_data)
 #print (lstm_data)

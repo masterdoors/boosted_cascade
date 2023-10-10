@@ -148,7 +148,7 @@ class KFoldWrapper(object):
         I = self.getIndicators(e, X, True)#False)
   
         self.lr[0].fit(I, y.flatten(), bias = bias, sample_weight = sample_weight)
-        I = self.getIndicators(e, X, False)#, False)
+        I = self.getIndicators(e, X, False, False)#, False)
         if len(raw_predictions.shape) == 2:
             history = self.factor*self.lr[0].decision_function(I)
             raw_predictions[:,k] += history
