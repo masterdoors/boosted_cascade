@@ -46,7 +46,7 @@ def polyndrome(n):
 
 simple_rnn_data = []
 lstm_data = []
-str_len = 14# in [20, 40, 60, 80, 100]:
+str_len = 40# in [20, 40, 60, 80, 100]:
 #    for _ in range(5):
 grammar = UnmarkedReversalGrammar(2,str_len)
 remove_epsilon_rules(grammar)
@@ -56,9 +56,9 @@ remove_unary_rules(grammar)
 sampler = LengthSampler(grammar)
 generator = random.Random()
 
-#X = np.asarray([list(sampler.sample(str_len, generator))
-#        for i in range(16)])
-X = polyndrome(7)  
+X = np.asarray([list(sampler.sample(str_len, generator))
+        for i in range(10000)])
+#X = polyndrome(7)  
 
 
 parser = Parser(grammar)
@@ -110,18 +110,19 @@ def ce_score2(logits, labels):
     #logits_ = sigmoid(logits)
     #logits_ = np.concatenate([logits_, 1. -logits_], axis=2)         
     ce =np.log(1 + np.exp(logits.flatten())) - labels.flatten() * logits.flatten()
+    #print("test:", logits.shape, logits.max(), logits.mean(),logits.min(),labels.shape )    
     return  ce.mean()#np.exp(ce).mean()  
 
 def make_model(input_shape):
     input_layer = tf.keras.layers.Input(input_shape)
-    initial_state = tf.keras.layers.Input((4,))
-    output_layer = tf.keras.layers.SimpleRNN(4, return_sequences=True)(input_layer, initial_state=initial_state)
+    initial_state = tf.keras.layers.Input((20,))
+    output_layer = tf.keras.layers.SimpleRNN(20, return_sequences=True)(input_layer, initial_state=initial_state)
     output_layer2 = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(2, activation='softmax'))(output_layer)
 
     return tf.keras.models.Model(inputs=[input_layer] + [initial_state], outputs=output_layer2)
 
 epochs = 100
-batch_size = 8
+batch_size = 10
 
 model = make_model(input_shape=x_train.shape[1:])
 
@@ -131,8 +132,8 @@ model.compile(
     metrics=["sparse_categorical_accuracy"],
 )
 
-some_initial_state = np.zeros((x_train.shape[0], 4))
-test_initial_state = np.zeros((x_validate.shape[0], 4))
+some_initial_state = np.zeros((x_train.shape[0], 20))
+test_initial_state = np.zeros((x_validate.shape[0], 20))
 
 print("Simple RNN")
 history = model.fit(
@@ -159,8 +160,8 @@ print(simple_rnn_data)
 
 def make_model2(input_shape):
     input_layer = tf.keras.layers.Input(input_shape)
-    dim = tf.zeros([batch_size,4])  
-    output_layer = tf.keras.layers.LSTM(4, return_sequences=True)(input_layer, initial_state=[dim, dim])
+    dim = tf.zeros([batch_size,20])  
+    output_layer = tf.keras.layers.LSTM(20, return_sequences=True)(input_layer, initial_state=[dim, dim])
     output_layer2 = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(2, activation='softmax'))(output_layer)    
 
     return tf.keras.models.Model(inputs=input_layer, outputs=output_layer2)
@@ -194,7 +195,7 @@ lstm_data.append((str_len, np.log(ce_score(Y_v, Y_validate)) - np.log(low_perp))
 print (lstm_data)
 
 print("Boosted cascade")
-model = CascadeSequentialClassifier(C=0.1, n_layers=10, verbose=2, n_estimators = 2, max_depth=3,max_features=0.5)#, n_iter_no_change = 1, validation_fraction = 0.1)
+model = CascadeSequentialClassifier(C=0.001, n_layers=5, verbose=2, n_estimators = 20, max_depth=3,max_features='sqrt')#, n_iter_no_change = 1, validation_fraction = 0.1)
 
 
 model.fit(x_train, Y_train)#, monitor = monitor)
