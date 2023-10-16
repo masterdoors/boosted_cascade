@@ -12,7 +12,7 @@ from sklearn.preprocessing import MinMaxScaler, Normalizer
 from sklearn.pipeline import make_pipeline
 from sklearn.ensemble._forest import _generate_unsampled_indices, _get_n_samples_bootstrap, _generate_sample_indices
 from _logistic import LogisticRegression
-
+from sklearn.neural_network import MLPRegressor
 
 from joblib import Parallel, delayed
 
@@ -94,7 +94,7 @@ class KFoldWrapper(object):
         if sample_weight is None:
             # Notice that a bunch of base estimators do not take
             # `sample_weight` as a valid input.
-            estimator.fit(X, y)
+            estimator.fit(X, y.flatten())
         else:
             estimator.fit(
                 X, y, sample_weight
@@ -143,7 +143,7 @@ class KFoldWrapper(object):
                                 fit_intercept=False,
                                 solver='lbfgs',
                                 max_iter=100000,
-                                multi_class='ovr', n_jobs=-1))            
+                                multi_class='ovr', n_jobs=2))            
         
         I = self.getIndicators(e, X, True)#False)
   
@@ -155,6 +155,11 @@ class KFoldWrapper(object):
         else:
             history = self.factor*self.lr[0].decision_function(I).reshape(raw_predictions.shape[0],raw_predictions.shape[1])
             raw_predictions[:,:,k] += history
+            
+        self.mlp = MLPRegressor(hidden_layer_sizes=self.hidden_size,activation=self.hidden_activation)
+        self.mlp.fit(I, history)
+        augmented = np.hstack([self.mlp.coefs_[1], self.mlp.intercepts_[1]])    
+        #TODO
         return history    
                  
     

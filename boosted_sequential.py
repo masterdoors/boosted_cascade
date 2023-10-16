@@ -30,6 +30,7 @@ import time
 from sklearn.ensemble import ExtraTreesRegressor
 from _binner import Binner
 from sklearn.model_selection import train_test_split
+from joblib import Parallel, delayed
 
 from sklearn._loss.loss import (
     _LOSSES,
@@ -54,7 +55,9 @@ def ce_score(logits, labels):
     #print("train:", logits.shape, logits.max(), logits.mean(),logits.min(),labels.shape )
     return  ce.mean()#np.exp(ce).mean()    
 
-
+def kfoldfitter(eid,kfold_estimator,X_aug,residual,y, raw_predictions,raw_predictions_copy,k,sample_weight):
+    return eid, kfold_estimator.fit(X_aug.reshape(-1,X_aug.shape[2]), residual[:,:, k].reshape(-1,1), y, raw_predictions, raw_predictions_copy.reshape(-1,residual.shape[2]), k, sample_weight)    
+    
 class BaseSequentialBoostingDummy(BaseBoostedCascade):
     def _fit_stages(
         self,
@@ -220,7 +223,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
             max_leaf_nodes=self.max_leaf_nodes,
             ccp_alpha=self.ccp_alpha,
             n_estimators=100,
-            n_jobs=-1
+            n_jobs=2
         )  
         
         restimator = ExtraTreesRegressor(
@@ -234,7 +237,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
             max_leaf_nodes=self.max_leaf_nodes,
             ccp_alpha=self.ccp_alpha,
             n_estimators=100,
-            n_jobs=-1
+            n_jobs=2
         )        
 
         # Need to pass a copy of raw_predictions to negative_gradient()
@@ -277,9 +280,9 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                     for k in range(K):
                         #neg_grad[:,k] -= alpha*np.multiply(history[:,t + 1,k], residual[:,t + 1])
                         for t2 in range(t + 1,X.shape[1]):
-                            h = np.ones(shape=(history.shape[0],))
+                            h = np.ones(shape=(history_sum.shape[0],))
                             for t3 in range(t + 1,t2 + 1):
-                                h = np.multiply(h,history[:,t3, :,k].sum(axis = 1))
+                                h = np.multiply(h,history_sum[:,t3, :,k].sum(axis = 1))
                             next_grad = - loss.gradient(
                                 y[:,t2].copy(order='C'), raw_predictions_copy[:,t2].copy(order='C') 
                             )   
@@ -287,7 +290,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                 else:  
                     h = np.ones(shape=(history.shape[0],))
                     for t2 in range(t + 1,X.shape[1]):
-                        h = np.multiply(h,history[:,t2,:, 0].sum(axis = 1))
+                        h = np.multiply(h,history_sum[:,t2,:, 0].sum(axis = 1))
                         next_grad = - loss.gradient(
                             y[:,t2].copy(order='C'), raw_predictions_copy[:,t2].copy(order='C') 
                         )   
@@ -342,14 +345,14 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                         1. / self.n_estimators,
                         self.random_state,
                         self.verbose
-                    )                       
+                    )
+                self.estimators_[i, k].append(kfold_estimator)                           
                  
-                history[:,:,eid,k] = kfold_estimator.fit(X_aug.reshape(-1,X_aug.shape[2]), residual[:,:, k].reshape(-1,1), y, raw_predictions, raw_predictions_copy.reshape(-1,residual.shape[2]), k, sample_weight)
-                
+            #history[:,:,eid,k] = kfold_estimator.fit(X_aug.reshape(-1,X_aug.shape[2]), residual[:,:, k].reshape(-1,1), y, raw_predictions, raw_predictions_copy.reshape(-1,residual.shape[2]), k, sample_weight)
+            hr = Parallel(n_jobs=5,backend="threading",require='sharedmem')(delayed(kfoldfitter)(j,self.estimators_[i, k][j],X_aug,residual,y, raw_predictions,raw_predictions_copy,k,sample_weight) for j in range(self.n_estimators))    
+            for j,h in hr:
+                history[:,:,j,k] = h    
                 #kfold_estimator.update_terminal_regions(X_aug, y, raw_predictions, k)
-                self.estimators_[i, k].append(kfold_estimator)
-                    
-    
                     # add tree to ensemble
         history_sum[:,:,:] += history   
         return raw_predictions.reshape(raw_predictions_copy.shape)   
