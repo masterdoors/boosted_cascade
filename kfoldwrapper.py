@@ -12,7 +12,7 @@ from sklearn.preprocessing import MinMaxScaler, Normalizer
 from sklearn.pipeline import make_pipeline
 from sklearn.ensemble._forest import _generate_unsampled_indices, _get_n_samples_bootstrap, _generate_sample_indices
 from _logistic import LogisticRegression
-from sklearn.neural_network import MLPRegressor
+from biased_mlp import BiasedMLPClassifier
 
 from joblib import Parallel, delayed
 
@@ -44,6 +44,8 @@ class KFoldWrapper(object):
         C=1.0,
         factor = 0.5,
         random_state=None,
+        hidden_size = 2,
+        hidden_activation = 'tanh',
         verbose=1,
     ):
      
@@ -56,37 +58,15 @@ class KFoldWrapper(object):
         self.estimators_ = []
         self.C = C
         self.factor = factor 
+        self.hidden_size = hidden_size
+        self.hidden_activation = hidden_activation
 
     @property
     def estimator_(self):
         """Return the list of internal estimators."""
         return self.estimators_
 
-#     def fit(self, X, y, y_, raw_predictions,rp_old,k,sample_weight=None):
-#         splitter = KFold(
-#             n_splits=self.n_splits,
-#             shuffle=True,
-#             random_state=self.random_state,
-#         )
-#         self.lr = []
-#         for i, (train_idx, val_idx) in enumerate(splitter.split(X, y)):
-#             estimator = copy.deepcopy(self.dummy_estimator_)
-# 
-#             # Fit on training samples
-#             if sample_weight is None:
-#                 # Notice that a bunch of base estimators do not take
-#                 # `sample_weight` as a valid input.
-#                 estimator.fit(X[train_idx], y[train_idx])
-#             else:
-#                 estimator.fit(
-#                     X[train_idx], y[train_idx], sample_weight[train_idx]
-#                 )
-#                 
-#             self.update_terminal_regions(estimator, X, y_, raw_predictions, rp_old,sample_weight,i, k, train_idx, val_idx) 
-#             
-#             self.estimators_.append(estimator) 
-            
-            
+
     def fit(self, X, y, y_, raw_predictions,rp_old,k,sample_weight=None):
         estimator = copy.deepcopy(self.dummy_estimator_)
         self.lr = []
@@ -139,34 +119,30 @@ class KFoldWrapper(object):
 
     def update_terminal_regions(self,e, X, y,raw_predictions, rp_old, sample_weight, k):
         bias = rp_old[:,k]
-        self.lr.append(LogisticRegression(C=self.C,
-                                fit_intercept=False,
-                                solver='lbfgs',
-                                max_iter=100000,
-                                multi_class='ovr', n_jobs=2))            
+        self.lr.append(BiasedMLPClassifier(hidden_layer_sizes=self.hidden_size,activation=self.hidden_activation))            
         
         I = self.getIndicators(e, X, True)#False)
   
-        self.lr[0].fit(I, y.flatten(), bias = bias, sample_weight = sample_weight)
+        self.lr[0].fit(I, y.flatten(), bias = bias)#, sample_weight = sample_weight)
         I = self.getIndicators(e, X, False, False)#, False)
         if len(raw_predictions.shape) == 2:
-            history = self.factor*self.lr[0].decision_function(I)
-            raw_predictions[:,k] += history
+            pred, hidden = self.lr[0].predict_proba(I)
+            raw_predictions[:,k] += self.factor*pred
         else:
-            history = self.factor*self.lr[0].decision_function(I).reshape(raw_predictions.shape[0],raw_predictions.shape[1])
-            raw_predictions[:,:,k] += history
+            pred, hidden = self.lr[0].predict_proba(I)
+            pred = pred.reshape(raw_predictions.shape[0],raw_predictions.shape[1])
+            raw_predictions[:,:,k] += self.factor*pred
             
-        self.mlp = MLPRegressor(hidden_layer_sizes=self.hidden_size,activation=self.hidden_activation)
-        self.mlp.fit(I, history)
-        augmented = np.hstack([self.mlp.coefs_[1], self.mlp.intercepts_[1]])    
-        #TODO
-        return history    
+        return hidden[1]    
                  
     
     def predict(self, X):
         n_samples, _ = X.shape
         out = np.zeros((n_samples, ))  # pre-allocate results
+        hidden = np.zeros((n_samples, self.hidden_size))
         for i, estimator in enumerate(self.estimators_):
             I = self.getIndicators(estimator, X, do_sample = False)
-            out += self.lr[i].decision_function(I)  # classification
-        return self.factor * out #/ self.n_splits  # return the average prediction
+            out_, hidden_ = self.lr[i].predict_proba(I)  # classification
+            out += out_
+            hidden += hidden_
+        return self.factor * out, hidden[1] #/ self.n_splits  # return the average prediction

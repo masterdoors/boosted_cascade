@@ -46,7 +46,7 @@ def polyndrome(n):
 
 simple_rnn_data = []
 lstm_data = []
-str_len = 40# in [20, 40, 60, 80, 100]:
+str_len = 20# in [20, 40, 60, 80, 100]:
 #    for _ in range(5):
 grammar = UnmarkedReversalGrammar(2,str_len)
 remove_epsilon_rules(grammar)
@@ -57,7 +57,7 @@ sampler = LengthSampler(grammar)
 generator = random.Random()
 
 X = np.asarray([list(sampler.sample(str_len, generator))
-        for i in range(10000)])
+        for i in range(1000)])
 #X = polyndrome(7)  
 
 
@@ -195,7 +195,7 @@ lstm_data.append((str_len, np.log(ce_score(Y_v, Y_validate)) - np.log(low_perp))
 print (lstm_data)
 
 print("Boosted cascade")
-model = CascadeSequentialClassifier(C=1.0, n_layers=30, verbose=2, n_estimators = 20, max_depth=3,max_features='sqrt')#, n_iter_no_change = 1, validation_fraction = 0.1)
+model = CascadeSequentialClassifier(C=1.0, n_layers=5, verbose=2, n_estimators = 4, max_depth=3,max_features='sqrt')#, n_iter_no_change = 1, validation_fraction = 0.1)
 
 
 model.fit(x_train, Y_train)#, monitor = monitor)

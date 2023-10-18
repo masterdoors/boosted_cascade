@@ -108,7 +108,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         # perform boosting iterations
         i = begin_at_stage
         
-        history = np.repeat(raw_predictions,self.n_estimators, axis=2).reshape(raw_predictions.shape[:2] + (self.n_estimators,) + (raw_predictions.shape[2],))
+        history = np.repeat((1. / self.hidden_size)*raw_predictions,self.hidden_size, axis=2).reshape(raw_predictions.shape[:2] + (self.hidden_size,) + (raw_predictions.shape[2],))
         history_sum = history.copy()
 
         for i in range(begin_at_stage, self.n_layers):
@@ -312,14 +312,14 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
     
             self.estimators_[i, k] = []
                    
-            X_aug = np.zeros((X.shape[0],X.shape[1], X.shape[2] + 2 * self.n_estimators))
+            X_aug = np.zeros((X.shape[0],X.shape[1], X.shape[2] + 2 * self.hidden_size))
              
             for t in range(X.shape[1]):
-                aug_part = [binned_history[:,t,:,k].reshape(-1,self.n_estimators)]
+                aug_part = [binned_history[:,t,:,k].reshape(-1,self.hidden_size)]
                 if t > 0:
-                    aug_part += [binned_history[:,t - 1,:,k].reshape(-1,self.n_estimators)] 
+                    aug_part += [binned_history[:,t - 1,:,k].reshape(-1,self.hidden_size)] 
                 else:
-                    aug_part += [np.zeros(binned_history[:,t,:,k].shape).reshape(-1,self.n_estimators)]
+                    aug_part += [np.zeros(binned_history[:,t,:,k].shape).reshape(-1,self.hidden_size)]
                                            
                 if isinstance(X,np.ndarray):
                     X_aug[:,t] = np.hstack([X[:,t]] + aug_part)
@@ -335,6 +335,8 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                         self.C,
                         1. / self.n_estimators,
                         self.random_state,
+                        self.hidden_size,
+                        self.hidden_activation,
                         self.verbose
                     )
                 else:
@@ -344,17 +346,19 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                         self.C,
                         1. / self.n_estimators,
                         self.random_state,
+                        self.hidden_size,
+                        self.hidden_activation,
                         self.verbose
                     )
                 self.estimators_[i, k].append(kfold_estimator)                           
                  
             #history[:,:,eid,k] = kfold_estimator.fit(X_aug.reshape(-1,X_aug.shape[2]), residual[:,:, k].reshape(-1,1), y, raw_predictions, raw_predictions_copy.reshape(-1,residual.shape[2]), k, sample_weight)
-            hr = Parallel(n_jobs=5,backend="threading",require='sharedmem')(delayed(kfoldfitter)(j,self.estimators_[i, k][j],X_aug,residual,y, raw_predictions,raw_predictions_copy,k,sample_weight) for j in range(self.n_estimators))    
+            hr = Parallel(n_jobs=4,backend="threading",require='sharedmem')(delayed(kfoldfitter)(j,self.estimators_[i, k][j],X_aug,residual,y, raw_predictions,raw_predictions_copy,k,sample_weight) for j in range(self.n_estimators))    
             for j,h in hr:
-                history[:,:,j,k] = h    
+                history[:,:,:,k] += h.reshape(history[:,:,:,k].shape)    
                 #kfold_estimator.update_terminal_regions(X_aug, y, raw_predictions, k)
                     # add tree to ensemble
-        history_sum[:,:,:] += history   
+        history_sum[:,:,:,:] += history   
         return raw_predictions.reshape(raw_predictions_copy.shape)   
     
     def _raw_predict_init(self, X):
@@ -382,14 +386,14 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         else:
             K = self._loss.n_classes    
         for k in range(K):
-            X_aug = np.zeros((X.shape[0],X.shape[1], X.shape[2] + 2 * self.n_estimators))
+            X_aug = np.zeros((X.shape[0],X.shape[1], X.shape[2] + 2 * self.hidden_size))
             for t in range(X.shape[1]):
 
-                aug_part = [binned_history[:,t,:,k].reshape(-1,self.n_estimators)]
+                aug_part = [binned_history[:,t,:,k].reshape(-1,self.hidden_size)]
                 if t > 0:
-                    aug_part += [binned_history[:,t - 1,:,k].reshape(-1,self.n_estimators)] 
+                    aug_part += [binned_history[:,t - 1,:,k].reshape(-1,self.hidden_size)] 
                 else:
-                    aug_part += [np.zeros(binned_history[:,t,:,k].shape).reshape(-1,self.n_estimators)]
+                    aug_part += [np.zeros(binned_history[:,t,:,k].shape).reshape(-1,self.hidden_size)]
                                            
                 if isinstance(X,np.ndarray):
                     X_aug[:,t] = np.hstack([X[:,t]] + aug_part)
@@ -398,9 +402,9 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                     X_aug[:,t] = hstack([X[:,t], csr_matrix(aug)])
                         
             for eid,estimator in enumerate(self.estimators_[i,k]):                            
-                h = estimator.predict(X_aug.reshape(-1,X_aug.shape[2])).reshape(raw_predictions.shape[0],raw_predictions.shape[1])    
-                history[:,:,eid,k] += h        
-                new_raw_predictions[:,:,k] += h 
+                r, h = estimator.predict(X_aug.reshape(-1,X_aug.shape[2])).reshape(raw_predictions.shape[0],raw_predictions.shape[1])    
+                history[:,:,k] += h        
+                new_raw_predictions[:,:,k] += r 
         raw_predictions[:,:,:] += new_raw_predictions     
         
 class CascadeSequentialClassifier(ClassifierMixin, BaseSequentialBoostingDummy):
@@ -460,7 +464,9 @@ class CascadeSequentialClassifier(ClassifierMixin, BaseSequentialBoostingDummy):
             tol=tol,
             ccp_alpha=ccp_alpha,
         )
-        self.dummy_loss = False
+        self.dummy_loss = True
+        self.hidden_size = 20
+        self.hidden_activation = 'tanh'
 
     def _encode_y(self, y, sample_weight):
         # encode classes into 0 ... n_classes - 1 and sets attributes classes_
@@ -532,7 +538,7 @@ class CascadeSequentialClassifier(ClassifierMixin, BaseSequentialBoostingDummy):
         return raw_predictions
     
     def predict_stages(self, X, raw_predictions):
-        history = np.repeat(raw_predictions,self.n_estimators, axis=2).reshape(raw_predictions.shape[:2] + (self.n_estimators,) + (raw_predictions.shape[2],))
+        history = np.repeat((1. / self.hidden_size)*raw_predictions,self.hidden_size, axis=2).reshape(raw_predictions.shape[:2] + (self.hidden_size,) + (raw_predictions.shape[2],))
         X = self._bin_data(self.binners[0], X, False)        
         for i in range(self.n_layers):
             self.predict_stage(i, X, raw_predictions, history)    
