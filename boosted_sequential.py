@@ -402,9 +402,9 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                     X_aug[:,t] = hstack([X[:,t], csr_matrix(aug)])
                         
             for eid,estimator in enumerate(self.estimators_[i,k]):                            
-                r, h = estimator.predict(X_aug.reshape(-1,X_aug.shape[2])).reshape(raw_predictions.shape[0],raw_predictions.shape[1])    
-                history[:,:,k] += h        
-                new_raw_predictions[:,:,k] += r 
+                r, h = estimator.predict(X_aug.reshape(-1,X_aug.shape[2]))
+                history[:,:,:,k] += h.reshape(history[:,:,:,k].shape)        
+                new_raw_predictions[:,:,k] += r.reshape(raw_predictions.shape[0],raw_predictions.shape[1])  
         raw_predictions[:,:,:] += new_raw_predictions     
         
 class CascadeSequentialClassifier(ClassifierMixin, BaseSequentialBoostingDummy):

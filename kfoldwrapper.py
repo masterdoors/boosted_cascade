@@ -119,7 +119,7 @@ class KFoldWrapper(object):
 
     def update_terminal_regions(self,e, X, y,raw_predictions, rp_old, sample_weight, k):
         bias = rp_old[:,k]
-        self.lr.append(BiasedMLPClassifier(hidden_layer_sizes=self.hidden_size,activation=self.hidden_activation))            
+        self.lr.append(BiasedMLPClassifier(alpha=1./self.C,hidden_layer_sizes=self.hidden_size,activation=self.hidden_activation,verbose=False, max_iter=200))            
         
         I = self.getIndicators(e, X, True)#False)
   
@@ -133,7 +133,7 @@ class KFoldWrapper(object):
             pred = pred.reshape(raw_predictions.shape[0],raw_predictions.shape[1])
             raw_predictions[:,:,k] += self.factor*pred
             
-        return hidden[1]    
+        return hidden    
                  
     
     def predict(self, X):
@@ -145,4 +145,4 @@ class KFoldWrapper(object):
             out_, hidden_ = self.lr[i].predict_proba(I)  # classification
             out += out_
             hidden += hidden_
-        return self.factor * out, hidden[1] #/ self.n_splits  # return the average prediction
+        return self.factor * out, hidden #/ self.n_splits  # return the average prediction

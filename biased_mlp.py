@@ -4,6 +4,7 @@ Created on 18 окт. 2023 г.
 @author: keen
 '''
 import warnings
+from sklearn.metrics import accuracy_score
 from sklearn.neural_network import MLPClassifier
 from sklearn.neural_network._base import ACTIVATIONS, LOSS_FUNCTIONS, DERIVATIVES 
 from sklearn.model_selection import train_test_split
@@ -27,7 +28,7 @@ def _pack(coefs_, intercepts_):
     return np.hstack([l.ravel() for l in coefs_ + intercepts_])
 
 class BiasedMLPClassifier(MLPClassifier):
-    def _forward_pass(self, activations, bias = None):
+    def _forward_pass(self, activations, bias = None, raw = False):
         """Perform a forward pass on the network by computing the values
         of the neurons in the hidden layers and the output layer.
 
@@ -47,8 +48,9 @@ class BiasedMLPClassifier(MLPClassifier):
                 hidden_activation(activations[i + 1])
 
         # For the last layer
-        output_activation = ACTIVATIONS[self.out_activation_]
-        output_activation(activations[i + 1])
+        if not raw:
+            output_activation = ACTIVATIONS[self.out_activation_]
+            output_activation(activations[i + 1])
         
         if bias is not None:
             activations[i + 1] += bias.reshape(-1,1)        
@@ -76,9 +78,14 @@ class BiasedMLPClassifier(MLPClassifier):
         self.bias = bias
         res = self._fit(X, y, incremental=False)
         self.bias = None
-        return res     
+        return res   
     
-    def _predict(self, X, check_input=True):
+    def _score(self, X, y, bias):
+        """Private score method without input validation"""
+        # Input validation would remove feature names, so we disable it
+        return accuracy_score(y, self._predict(X, check_input=False, bias=bias))      
+    
+    def _predict(self, X, check_input=True, bias = None):
         """Private predict method with optional input validation"""
         if check_input:
             X = self._validate_data(X, accept_sparse=["csr", "csc"], reset=False)
@@ -96,7 +103,7 @@ class BiasedMLPClassifier(MLPClassifier):
         # Initialize lists
         activations = [X] + [None] * (len(layer_units) - 1)       
         
-        activations = self._forward_pass(activations)
+        activations = self._forward_pass(activations, bias)
         
         y_pred = activations[self.n_layers_ - 1]
 
@@ -123,7 +130,7 @@ class BiasedMLPClassifier(MLPClassifier):
         # Initialize lists
         activations = [X] + [None] * (len(layer_units) - 1)       
         
-        activations = self._forward_pass(activations)
+        activations = self._forward_pass(activations, raw = True)
         
         y_pred = activations[self.n_layers_ - 1]
 
