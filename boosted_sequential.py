@@ -31,6 +31,7 @@ from sklearn.ensemble import ExtraTreesRegressor
 from _binner import Binner
 from sklearn.model_selection import train_test_split
 from joblib import Parallel, delayed
+from sklearn.neural_network._base import DERIVATIVES
 
 from sklearn._loss.loss import (
     _LOSSES,
@@ -351,14 +352,13 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                         self.verbose
                     )
                 self.estimators_[i, k].append(kfold_estimator)                           
-                 
+                history_sum[:,:,:,k] += kfold_estimator.fit(X_aug.reshape(-1,X_aug.shape[2]), residual[:,:, k].reshape(-1,1), y, raw_predictions, raw_predictions_copy.reshape(-1,residual.shape[2]), k, sample_weight).reshape(history[:,:,:,k].shape)     
             #history[:,:,eid,k] = kfold_estimator.fit(X_aug.reshape(-1,X_aug.shape[2]), residual[:,:, k].reshape(-1,1), y, raw_predictions, raw_predictions_copy.reshape(-1,residual.shape[2]), k, sample_weight)
-            hr = Parallel(n_jobs=4,backend="threading",require='sharedmem')(delayed(kfoldfitter)(j,self.estimators_[i, k][j],X_aug,residual,y, raw_predictions,raw_predictions_copy,k,sample_weight) for j in range(self.n_estimators))    
-            for j,h in hr:
-                history[:,:,:,k] += h.reshape(history[:,:,:,k].shape)    
+            #hr = Parallel(n_jobs=4,backend="threading",require='sharedmem')(delayed(kfoldfitter)(j,self.estimators_[i, k][j],X_aug,residual,y, raw_predictions,raw_predictions_copy,k,sample_weight) for j in range(self.n_estimators))    
+            #for j,h in hr:
+            #    history[:,:,:,k] += h.reshape(history[:,:,:,k].shape)    
                 #kfold_estimator.update_terminal_regions(X_aug, y, raw_predictions, k)
                     # add tree to ensemble
-        history_sum[:,:,:,:] += history   
         return raw_predictions.reshape(raw_predictions_copy.shape)   
     
     def _raw_predict_init(self, X):
@@ -380,7 +380,6 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
     
     def predict_stage(self, i, X, raw_predictions, history):
         binned_history = self._bin_data(self.binners[i + 1], history.reshape(raw_predictions.shape[0], -1), is_training_data = False).reshape(history.shape)
-        new_raw_predictions = np.zeros(raw_predictions.shape)
         if self._loss.n_classes == 2:
             K = 1
         else:
@@ -388,7 +387,6 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         for k in range(K):
             X_aug = np.zeros((X.shape[0],X.shape[1], X.shape[2] + 2 * self.hidden_size))
             for t in range(X.shape[1]):
-
                 aug_part = [binned_history[:,t,:,k].reshape(-1,self.hidden_size)]
                 if t > 0:
                     aug_part += [binned_history[:,t - 1,:,k].reshape(-1,self.hidden_size)] 
@@ -401,11 +399,10 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                     aug = np.hstack(aug_part)
                     X_aug[:,t] = hstack([X[:,t], csr_matrix(aug)])
                         
-            for eid,estimator in enumerate(self.estimators_[i,k]):                            
+            for _,estimator in enumerate(self.estimators_[i,k]):                            
                 r, h = estimator.predict(X_aug.reshape(-1,X_aug.shape[2]))
                 history[:,:,:,k] += h.reshape(history[:,:,:,k].shape)        
-                new_raw_predictions[:,:,k] += r.reshape(raw_predictions.shape[0],raw_predictions.shape[1])  
-        raw_predictions[:,:,:] += new_raw_predictions     
+                raw_predictions[:,:,k] += r.reshape(raw_predictions.shape[0],raw_predictions.shape[1])  
         
 class CascadeSequentialClassifier(ClassifierMixin, BaseSequentialBoostingDummy):
     _parameter_constraints: dict = {

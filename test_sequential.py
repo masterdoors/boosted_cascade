@@ -195,13 +195,13 @@ lstm_data.append((str_len, np.log(ce_score(Y_v, Y_validate)) - np.log(low_perp))
 print (lstm_data)
 
 print("Boosted cascade")
-model = CascadeSequentialClassifier(C=0.0001, n_layers=5, verbose=2, n_estimators = 4, max_depth=3,max_features='sqrt')#, n_iter_no_change = 1, validation_fraction = 0.1)
+model = CascadeSequentialClassifier(C=0.1, n_layers=15, verbose=2, n_estimators = 4, max_depth=3,max_features='sqrt')#, n_iter_no_change = 1, validation_fraction = 0.1)
 
 
 model.fit(x_train, Y_train)#, monitor = monitor)
  
 Y_v = model.predict_proba(x_validate)
-25
+
 # 
 # 
 

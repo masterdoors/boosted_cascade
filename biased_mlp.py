@@ -47,14 +47,14 @@ class BiasedMLPClassifier(MLPClassifier):
             if (i + 1) != (self.n_layers_ - 1):
                 hidden_activation(activations[i + 1])
 
+        if bias is not None:
+            activations[i + 1] += bias.reshape(-1,1)   
+
         # For the last layer
         if not raw:
             output_activation = ACTIVATIONS[self.out_activation_]
             output_activation(activations[i + 1])
         
-        if bias is not None:
-            activations[i + 1] += bias.reshape(-1,1)        
-
         return activations    
     
     @_fit_context(prefer_skip_nested_validation=True)
