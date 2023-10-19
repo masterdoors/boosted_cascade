@@ -28,7 +28,7 @@ def _pack(coefs_, intercepts_):
     return np.hstack([l.ravel() for l in coefs_ + intercepts_])
 
 class BiasedMLPClassifier(MLPClassifier):
-    def _forward_pass(self, activations, bias = None, raw = False):
+    def _forward_pass(self, activations, bias = None, raw = False, non_activated = None):
         """Perform a forward pass on the network by computing the values
         of the neurons in the hidden layers and the output layer.
 
@@ -42,7 +42,8 @@ class BiasedMLPClassifier(MLPClassifier):
         for i in range(self.n_layers_ - 1):
             activations[i + 1] = safe_sparse_dot(activations[i], self.coefs_[i])
             activations[i + 1] += self.intercepts_[i]
-
+            if non_activated is not None:
+                non_activated[i + 1] = activations[i + 1].copy()
             # For the hidden layers
             if (i + 1) != (self.n_layers_ - 1):
                 hidden_activation(activations[i + 1])
@@ -112,7 +113,7 @@ class BiasedMLPClassifier(MLPClassifier):
 
         return self._label_binarizer.inverse_transform(y_pred), activations
     
-    def predict_proba(self, X, check_input=True):
+    def predict_proba(self, X, check_input=True, get_non_activated = False):
         """Private predict method with optional input validation"""
         if check_input:
             X = self._validate_data(X, accept_sparse=["csr", "csc"], reset=False)
@@ -128,16 +129,22 @@ class BiasedMLPClassifier(MLPClassifier):
         layer_units = [n_features] + hidden_layer_sizes + [self.n_outputs_]
 
         # Initialize lists
-        activations = [X] + [None] * (len(layer_units) - 1)       
+        activations = [X] + [None] * (len(layer_units) - 1)   
         
-        activations = self._forward_pass(activations, raw = True)
+        if  get_non_activated:
+            non_activations = activations.copy()
+        else:
+            non_activations = None       
+        activations = self._forward_pass(activations, raw = True, non_activated = non_activations)
         
         y_pred = activations[self.n_layers_ - 1]
 
         if self.n_outputs_ == 1:
             y_pred = y_pred.ravel()
-
-        return y_pred, activations[1]  
+        if non_activations:
+            return y_pred, activations[1], non_activations
+        else:     
+            return y_pred, activations[1]  
         
     def _loss_grad_lbfgs(
         self, packed_coef_inter, X, y, activations, deltas, coef_grads, intercept_grads

@@ -80,10 +80,10 @@ class KFoldWrapper(object):
                 X, y, sample_weight
             )
             
-        history = self.update_terminal_regions(estimator, X, y_, raw_predictions, rp_old,sample_weight, k) 
+        history, non_activated = self.update_terminal_regions(estimator, X, y_, raw_predictions, rp_old,sample_weight, k) 
         
         self.estimators_.append(estimator)
-        return history  
+        return history, non_activated  
             
     def getIndicators(self, estimator, X, sampled = True, do_sample = True):
         Is = []
@@ -126,14 +126,14 @@ class KFoldWrapper(object):
         self.lr[0].fit(I, y.flatten(), bias = bias)#, sample_weight = sample_weight)
         I = self.getIndicators(e, X, False, False)#, False)
         if len(raw_predictions.shape) == 2:
-            pred, hidden = self.lr[0].predict_proba(I)
+            pred, hidden, non_activated = self.lr[0].predict_proba(I,  get_non_activated = False)
             raw_predictions[:,k] += self.factor*pred
         else:
-            pred, hidden = self.lr[0].predict_proba(I)
+            pred, hidden, non_activated = self.lr[0].predict_proba(I, get_non_activated = True)
             pred = pred.reshape(raw_predictions.shape[0],raw_predictions.shape[1])
             raw_predictions[:,:,k] += self.factor*pred
             
-        return hidden    
+        return hidden, non_activated    
                  
     
     def predict(self, X):

@@ -111,6 +111,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         
         history = np.repeat((1. / self.hidden_size)*raw_predictions,self.hidden_size, axis=2).reshape(raw_predictions.shape[:2] + (self.hidden_size,) + (raw_predictions.shape[2],))
         history_sum = history.copy()
+        #non_activated
 
         for i in range(begin_at_stage, self.n_layers):
             # subsampling
@@ -129,7 +130,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                 X_,
                 y,
                 raw_predictions,
-                history,
+                non_activated,
                 history_sum,
                 sample_weight,
                 sample_mask,
@@ -201,7 +202,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         X,
         y,
         raw_predictions,
-        history,
+        non_activated,
         history_sum,
         sample_weight,
         sample_mask,
