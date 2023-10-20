@@ -142,7 +142,7 @@ class BiasedMLPClassifier(MLPClassifier):
         if self.n_outputs_ == 1:
             y_pred = y_pred.ravel()
         if non_activations:
-            return y_pred, activations[1], non_activations
+            return y_pred, activations[1], non_activations[1]
         else:     
             return y_pred, activations[1]  
         

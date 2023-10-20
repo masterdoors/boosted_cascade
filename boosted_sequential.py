@@ -58,6 +58,9 @@ def ce_score(logits, labels):
 
 def kfoldfitter(eid,kfold_estimator,X_aug,residual,y, raw_predictions,raw_predictions_copy,k,sample_weight):
     return eid, kfold_estimator.fit(X_aug.reshape(-1,X_aug.shape[2]), residual[:,:, k].reshape(-1,1), y, raw_predictions, raw_predictions_copy.reshape(-1,residual.shape[2]), k, sample_weight)    
+
+def inversed_tanh(x):
+    return 0.5 * np.log((1. + x)/(1. - x))
     
 class BaseSequentialBoostingDummy(BaseBoostedCascade):
     def _fit_stages(
@@ -109,9 +112,8 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         # perform boosting iterations
         i = begin_at_stage
         
-        history = np.repeat((1. / self.hidden_size)*raw_predictions,self.hidden_size, axis=2).reshape(raw_predictions.shape[:2] + (self.hidden_size,) + (raw_predictions.shape[2],))
-        history_sum = history.copy()
-        #non_activated
+        history_sum = np.repeat((1. / self.hidden_size)*raw_predictions,self.hidden_size, axis=2).reshape(raw_predictions.shape[:2] + (self.hidden_size,) + (raw_predictions.shape[2],))
+        non_activated = inversed_tanh(history_sum) 
 
         for i in range(begin_at_stage, self.n_layers):
             # subsampling
@@ -271,6 +273,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
             K = loss.n_classes
         
         alpha = 1.0
+
         for t in reversed(range(0,X.shape[1])):
             #dummy loss
             neg_grad = - loss.gradient(
@@ -279,24 +282,15 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
             
             if not self.dummy_loss  and t < X.shape[1]-1:
                 if K > 1: 
-                    for k in range(K):
-                        #neg_grad[:,k] -= alpha*np.multiply(history[:,t + 1,k], residual[:,t + 1])
-                        for t2 in range(t + 1,X.shape[1]):
-                            h = np.ones(shape=(history_sum.shape[0],))
-                            for t3 in range(t + 1,t2 + 1):
-                                h = np.multiply(h,history_sum[:,t3, :,k].sum(axis = 1))
-                            next_grad = - loss.gradient(
-                                y[:,t2].copy(order='C'), raw_predictions_copy[:,t2].copy(order='C') 
-                            )   
-                            neg_grad[:,k] += alpha*np.multiply(h,next_grad[:,k].flatten())                        
-                else:  
-                    h = np.ones(shape=(history.shape[0],))
-                    for t2 in range(t + 1,X.shape[1]):
-                        h = np.multiply(h,history_sum[:,t2,:, 0].sum(axis = 1))
-                        next_grad = - loss.gradient(
-                            y[:,t2].copy(order='C'), raw_predictions_copy[:,t2].copy(order='C') 
-                        )   
-                        neg_grad += alpha*np.multiply(h,next_grad.flatten())
+                    pass                    
+                else:
+                    chain = 1.0  
+                    for j in range(t + 1,X.shape[1]):
+                        mult = 1.0
+                        chain *= mult
+                        
+                        neg_grad -= chain * loss.gradient(
+                            y[:,t + j].copy(order='C'), raw_predictions_copy[:,t + j].copy(order='C')) 
             
             if loss.n_classes == 2:
                 neg_grad = neg_grad.reshape(-1,1)
@@ -353,7 +347,10 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                         self.verbose
                     )
                 self.estimators_[i, k].append(kfold_estimator)                           
-                history_sum[:,:,:,k] += kfold_estimator.fit(X_aug.reshape(-1,X_aug.shape[2]), residual[:,:, k].reshape(-1,1), y, raw_predictions, raw_predictions_copy.reshape(-1,residual.shape[2]), k, sample_weight).reshape(history[:,:,:,k].shape)     
+                
+                h, na = kfold_estimator.fit(X_aug.reshape(-1,X_aug.shape[2]), residual[:,:, k].reshape(-1,1), y, raw_predictions, raw_predictions_copy.reshape(-1,residual.shape[2]), k, sample_weight)
+                history_sum[:,:,:,k] += h.reshape(history_sum[:,:,:,k].shape)
+                non_activated[:,:,:,k] = na.reshape(history_sum[:,:,:,k].shape)     
             #history[:,:,eid,k] = kfold_estimator.fit(X_aug.reshape(-1,X_aug.shape[2]), residual[:,:, k].reshape(-1,1), y, raw_predictions, raw_predictions_copy.reshape(-1,residual.shape[2]), k, sample_weight)
             #hr = Parallel(n_jobs=4,backend="threading",require='sharedmem')(delayed(kfoldfitter)(j,self.estimators_[i, k][j],X_aug,residual,y, raw_predictions,raw_predictions_copy,k,sample_weight) for j in range(self.n_estimators))    
             #for j,h in hr:
