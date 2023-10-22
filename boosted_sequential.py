@@ -286,11 +286,36 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                 else:
                     chain = 1.0  
                     for j in range(t + 1,X.shape[1]):
-                        mult = 1.0
-                        chain *= mult
-                        
+                        mult = np.zeros(neg_grad.shape)
+                        a_t1h = non_activated[:, j]
+                        der = np.ones(a_t1h.shape)
+                        DERIVATIVES[self.hidden_activation](a_t1h, der)                           
+                        if i > 0:
+                            for e in self.estimators_[i-1, 0]:
+                                input_size = e.lr[0].coefs_[0].shape[0]
+                                
+                                whi = e.lr[0].coefs_[0]
+                                wkh = e.lr[0].coefs_[1]
+                                
+                                for h in range(self.hidden_size):
+                                    for h_ in range(self.hidden_size):
+         
+                                        for i_ in range(input_size):
+                                            mult +=  (1. / wkh[h,0]) * whi[i_,h_] * der[:, h_,0]                                 
+                            mult *= (1. / len(self.estimators_[i-1, 0]))        
+                        else:
+                            whi = np.ones((X.shape[2], self.hidden_size))*(1. / (self.hidden_size))
+                            wkh = np.ones((self.hidden_size, K))*(1. / (self.hidden_size))
+                         
+                            for h in range(self.hidden_size):
+                                for h_ in range(self.hidden_size):
+     
+                                    for i_ in range(X.shape[2]):
+                                        mult +=  (1. / wkh[h,0]) * whi[i_,h_] * der[:, h_,0] 
+                                
+                        chain *= mult*alpha
                         neg_grad -= chain * loss.gradient(
-                            y[:,t + j].copy(order='C'), raw_predictions_copy[:,t + j].copy(order='C')) 
+                            y[:,j].copy(order='C'), raw_predictions_copy[:,j].copy(order='C')) 
             
             if loss.n_classes == 2:
                 neg_grad = neg_grad.reshape(-1,1)
@@ -459,7 +484,7 @@ class CascadeSequentialClassifier(ClassifierMixin, BaseSequentialBoostingDummy):
             tol=tol,
             ccp_alpha=ccp_alpha,
         )
-        self.dummy_loss = True
+        self.dummy_loss = False
         self.hidden_size = 20
         self.hidden_activation = 'tanh'
 
