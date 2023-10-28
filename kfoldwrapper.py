@@ -13,6 +13,7 @@ from sklearn.pipeline import make_pipeline
 from sklearn.ensemble._forest import _generate_unsampled_indices, _get_n_samples_bootstrap, _generate_sample_indices
 from _logistic import LogisticRegression
 from biased_mlp import BiasedMLPClassifier
+from sklearn.metrics import accuracy_score
 
 from joblib import Parallel, delayed
 
@@ -70,19 +71,52 @@ class KFoldWrapper(object):
     def fit(self, X, y, y_, raw_predictions,rp_old,k,sample_weight=None):
         estimator = copy.deepcopy(self.dummy_estimator_)
         self.lr = []
-        # Fit on training samples
-        if sample_weight is None:
-            # Notice that a bunch of base estimators do not take
-            # `sample_weight` as a valid input.
-            estimator.fit(X, y.flatten())
-        else:
-            estimator.fit(
-                X, y, sample_weight
-            )
-            
-        history, non_activated = self.update_terminal_regions(estimator, X, y_, raw_predictions, rp_old,sample_weight, k) 
         
-        self.estimators_.append(estimator)
+        kf = KFold(n_splits=self.n_splits, random_state=None, shuffle=True)
+        pred = np.zeros((X.shape[0],))
+        history = np.zeros((X.shape[0],self.hidden_size))
+        non_activated = np.zeros((X.shape[0],self.hidden_size))
+        
+        for i,(train_index, test_index) in enumerate(kf.split(X)):
+            # Fit on training samples
+            if sample_weight is None:
+                # Notice that a bunch of base estimators do not take
+                # `sample_weight` as a valid input.
+                estimator.fit(X[train_index], y[train_index].flatten())
+            else:
+                estimator.fit(
+                    X[train_index], y[train_index].flatten(), sample_weight[train_index]
+                )
+             
+            bias = rp_old[:,k]
+            self.lr.append(BiasedMLPClassifier(alpha=1./self.C,hidden_layer_sizes=self.hidden_size,activation=self.hidden_activation,verbose=False, max_iter=2000))            
+            
+            I_ = self.getIndicators(estimator, X, False, False)[train_index]#False)
+            self.lr[i].fit(I_, y_.flatten()[train_index], bias = bias[train_index])#, sample_weight = sample_weight)
+    
+            I = self.getIndicators(estimator, X, False, False)[test_index] #, False)
+            if len(raw_predictions.shape) == 2:
+                pred[test_index], history[test_index], non_activated[test_index] = self.lr[i].predict_proba(I,  get_non_activated = True)
+            else:
+                pred[test_index], history[test_index], non_activated[test_index] = self.lr[i].predict_proba(I, get_non_activated = True)
+
+            self.estimators_.append(estimator)
+            
+            signs = (pred[test_index] + bias[test_index]) >= 0
+            
+            print("KF test acc: ", accuracy_score(y_.flatten()[test_index],signs))
+            
+            tp,_,_ = self.lr[i].predict_proba(I_,  get_non_activated = True)
+            signs = (tp + bias[train_index]) >= 0
+            print("KF train acc: ", accuracy_score(y_.flatten()[train_index],signs))
+            
+            
+            
+        pred = pred.reshape(raw_predictions.shape[0],raw_predictions.shape[1])     
+        history = history.reshape(raw_predictions.shape[0],raw_predictions.shape[1],self.hidden_size)       
+        non_activated = non_activated.reshape(raw_predictions.shape[0],raw_predictions.shape[1],self.hidden_size)
+        raw_predictions[:,:,k] += self.factor*pred             
+            
         return history, non_activated  
             
     def getIndicators(self, estimator, X, sampled = True, do_sample = True):
@@ -117,22 +151,22 @@ class KFoldWrapper(object):
         return np.hstack(Is)            
                     
 
-    def update_terminal_regions(self,e, X, y,raw_predictions, rp_old, sample_weight, k):
+    def update_terminal_regions(self,e, X, y,raw_predictions, rp_old, sample_weight, k,train_index, test_index, i):
         bias = rp_old[:,k]
-        self.lr.append(BiasedMLPClassifier(alpha=1./self.C,hidden_layer_sizes=self.hidden_size,activation=self.hidden_activation,verbose=False, max_iter=200))            
+        self.lr.append(BiasedMLPClassifier(alpha=1./self.C,hidden_layer_sizes=self.hidden_size,activation=self.hidden_activation,verbose=False, max_iter=2000))            
         
-        I = self.getIndicators(e, X, True)#False)
-  
-        self.lr[0].fit(I, y.flatten(), bias = bias)#, sample_weight = sample_weight)
-        I = self.getIndicators(e, X, False, False)#, False)
+        I = self.getIndicators(e, X, False, False)[train_index]#False)
+        self.lr[i].fit(I, y.flatten(), bias = bias)#, sample_weight = sample_weight)
+
+        I = self.getIndicators(e, X, False, False)[test_index] #, False)
         if len(raw_predictions.shape) == 2:
-            pred, hidden, non_activated = self.lr[0].predict_proba(I,  get_non_activated = False)
-            raw_predictions[:,k] += self.factor*pred
+            pred, hidden, non_activated = self.lr[i].predict_proba(I,  get_non_activated = False)
+            raw_predictions[test_index,k] += self.factor*pred
         else:
-            pred, hidden, non_activated = self.lr[0].predict_proba(I, get_non_activated = True)
+            pred, hidden, non_activated = self.lr[i].predict_proba(I, get_non_activated = True)
             pred = pred.reshape(raw_predictions.shape[0],raw_predictions.shape[1])
             raw_predictions[:,:,k] += self.factor*pred
-            
+               
         return hidden, non_activated    
                  
     
@@ -145,4 +179,4 @@ class KFoldWrapper(object):
             out_, hidden_ = self.lr[i].predict_proba(I)  # classification
             out += out_
             hidden += hidden_
-        return self.factor * out, hidden #/ self.n_splits  # return the average prediction
+        return self.factor * out / self.n_splits, hidden #/ self.n_splits  # return the average prediction

@@ -285,33 +285,43 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                     pass                    
                 else:
                     chain = 1.0  
+                    l = 1
+                    if self.estimators_[i-1, 0] is not None:
+                        l = len(self.estimators_[i-1, 0])
+                    w = np.zeros((l, self.hidden_size))
+                    if i > 0:
+                        for eidx, e in enumerate(self.estimators_[i-1, 0]):
+                            input_size = e.lr[0].coefs_[0].shape[0]
+                            
+                            whi = e.lr[0].coefs_[0]
+                            wkh = e.lr[0].coefs_[1]
+                            
+                            for h in range(self.hidden_size):
+                                for h_ in range(self.hidden_size):
+                                    for i_ in range(input_size):
+                                        w[eidx,h_] +=  (1. / wkh[h,0]) * whi[i_,h_]                             
+                    else:
+                        whi = np.ones((X.shape[2], self.hidden_size))*(1. / (self.hidden_size))
+                        wkh = np.ones((self.hidden_size, K))*(1. / (self.hidden_size))
+                     
+                        for h in range(self.hidden_size):
+                            for h_ in range(self.hidden_size):
+                                for i_ in range(X.shape[2]):
+                                    w[0,h_] +=  (1. / wkh[h,0]) * whi[i_,h_]  
+                    
                     for j in range(t + 1,X.shape[1]):
                         mult = np.zeros(neg_grad.shape)
                         a_t1h = non_activated[:, j]
                         der = np.ones(a_t1h.shape)
                         DERIVATIVES[self.hidden_activation](a_t1h, der)                           
                         if i > 0:
-                            for e in self.estimators_[i-1, 0]:
-                                input_size = e.lr[0].coefs_[0].shape[0]
-                                
-                                whi = e.lr[0].coefs_[0]
-                                wkh = e.lr[0].coefs_[1]
-                                
-                                for h in range(self.hidden_size):
-                                    for h_ in range(self.hidden_size):
-         
-                                        for i_ in range(input_size):
-                                            mult +=  (1. / wkh[h,0]) * whi[i_,h_] * der[:, h_,0]                                 
+                            for eidx, e in enumerate(self.estimators_[i-1, 0]):
+                                for h_ in range(self.hidden_size):
+                                    mult +=  w[eidx, h_] * der[:, h_,0]                                 
                             mult *= (1. / len(self.estimators_[i-1, 0]))        
                         else:
-                            whi = np.ones((X.shape[2], self.hidden_size))*(1. / (self.hidden_size))
-                            wkh = np.ones((self.hidden_size, K))*(1. / (self.hidden_size))
-                         
-                            for h in range(self.hidden_size):
-                                for h_ in range(self.hidden_size):
-     
-                                    for i_ in range(X.shape[2]):
-                                        mult +=  (1. / wkh[h,0]) * whi[i_,h_] * der[:, h_,0] 
+                            for h_ in range(self.hidden_size):
+                                mult +=  w[0, h_]  * der[:, h_,0] 
                                 
                         chain *= mult*alpha
                         neg_grad -= chain * loss.gradient(
@@ -353,7 +363,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                     kfold_estimator = KFoldWrapper(
                         estimator,
                         self.n_splits,
-                        self.C,
+                        self.C, # * (i*10 + 1),
                         1. / self.n_estimators,
                         self.random_state,
                         self.hidden_size,
@@ -362,9 +372,9 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                     )
                 else:
                     kfold_estimator = KFoldWrapper(
-                        restimator,
+                        estimator,#restimator,
                         self.n_splits,
-                        self.C,
+                        self.C, # * (i*10 + 1),
                         1. / self.n_estimators,
                         self.random_state,
                         self.hidden_size,

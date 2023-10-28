@@ -155,6 +155,18 @@ print(
 
 simple_rnn_data.append((str_len, np.log(ce_score(Y_v, Y_validate)) - np.log(low_perp)))
 
+Y_v = model.predict([x_train] + [some_initial_state], batch_size=batch_size)
+
+
+Y_v_labels = Y_v.argmax(axis=2)
+
+print(
+    f"Boosted Cascade Classification report:\n"
+    f"{metrics.classification_report(Y_train.flatten(), Y_v_labels.flatten())}\n")
+
+simple_rnn_data.append((str_len, np.log(ce_score(Y_v, Y_train)) - np.log(low_perp)))
+print (simple_rnn_data)
+
 
 print(simple_rnn_data)
 
@@ -194,14 +206,25 @@ print(
 lstm_data.append((str_len, np.log(ce_score(Y_v, Y_validate)) - np.log(low_perp)))
 print (lstm_data)
 
+Y_v = model.predict(x_train, batch_size=batch_size)
+
+
+Y_v_labels = Y_v.argmax(axis=2)
+
+print(
+    f"Boosted Cascade Classification report:\n"
+    f"{metrics.classification_report(Y_train.flatten(), Y_v_labels.flatten())}\n")
+
+lstm_data.append((str_len, np.log(ce_score(Y_v, Y_train)) - np.log(low_perp)))
+print (lstm_data)
+
 print("Boosted cascade")
-model = CascadeSequentialClassifier(C=0.1, n_layers=15, verbose=2, n_estimators = 4, max_depth=3,max_features='sqrt')#, n_iter_no_change = 1, validation_fraction = 0.1)
+model = CascadeSequentialClassifier(C=0.1, n_layers=15, verbose=2, n_estimators = 4, max_depth=1,max_features='sqrt')#, n_iter_no_change = 1, validation_fraction = 0.1)
 
 
 model.fit(x_train, Y_train)#, monitor = monitor)
  
 Y_v = model.predict_proba(x_validate)
-
 # 
 # 
 
@@ -215,7 +238,6 @@ print("Cross-entropy diff: ", ce_score2(Y_v, Y_validate) - np.log(low_perp))
 
 
 Y_v = model.predict_proba(x_train)
-
 # 
 # 
 
