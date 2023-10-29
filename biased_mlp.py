@@ -331,6 +331,7 @@ class BiasedMLPClassifier(MLPClassifier):
                     sample_idx = shuffle(sample_idx, random_state=self._random_state)
 
                 accumulated_loss = 0.0
+                bc = 0
                 for batch_slice in gen_batches(n_samples, batch_size):
                     if self.shuffle:
                         X_batch = _safe_indexing(X, sample_idx[batch_slice])
@@ -354,14 +355,16 @@ class BiasedMLPClassifier(MLPClassifier):
                     accumulated_loss += batch_loss * (
                         batch_slice.stop - batch_slice.start
                     )
-
+                    bc += 1
+                    if it == 0 and bc < 20:
+                        print("Acc loss: ", accumulated_loss / (batch_size * bc))
                     # update weights
                     grads = coef_grads + intercept_grads
                     self._optimizer.update_params(params, grads)
 
                 self.n_iter_ += 1
                 self.loss_ = accumulated_loss / X.shape[0]
-
+                
                 self.t_ += n_samples
                 self.loss_curve_.append(self.loss_)
                 if self.verbose:

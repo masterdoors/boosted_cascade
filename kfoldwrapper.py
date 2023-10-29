@@ -91,10 +91,10 @@ class KFoldWrapper(object):
             bias = rp_old[:,k]
             self.lr.append(BiasedMLPClassifier(alpha=1./self.C,hidden_layer_sizes=self.hidden_size,activation=self.hidden_activation,verbose=False, max_iter=2000))            
             
-            I_ = self.getIndicators(estimator, X, False, False)[train_index]#False)
+            I_ = self.getIndicators(estimator, X[train_index], False, False)#False)
             self.lr[i].fit(I_, y_.flatten()[train_index], bias = bias[train_index])#, sample_weight = sample_weight)
     
-            I = self.getIndicators(estimator, X, False, False)[test_index] #, False)
+            I = self.getIndicators(estimator, X[test_index], False, False) #, False)
             if len(raw_predictions.shape) == 2:
                 pred[test_index], history[test_index], non_activated[test_index] = self.lr[i].predict_proba(I,  get_non_activated = True)
             else:
@@ -109,8 +109,6 @@ class KFoldWrapper(object):
             tp,_,_ = self.lr[i].predict_proba(I_,  get_non_activated = True)
             signs = (tp + bias[train_index]) >= 0
             print("KF train acc: ", accuracy_score(y_.flatten()[train_index],signs))
-            
-            
             
         pred = pred.reshape(raw_predictions.shape[0],raw_predictions.shape[1])     
         history = history.reshape(raw_predictions.shape[0],raw_predictions.shape[1],self.hidden_size)       
