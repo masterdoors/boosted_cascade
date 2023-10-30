@@ -356,8 +356,8 @@ class BiasedMLPClassifier(MLPClassifier):
                         batch_slice.stop - batch_slice.start
                     )
                     bc += 1
-                    if it == 0 and bc < 20:
-                        print("Acc loss: ", accumulated_loss / (batch_size * bc))
+                    #if it == 0 and bc < 20:
+                    #    print("Acc loss: ", accumulated_loss / (batch_size * bc))
                     # update weights
                     grads = coef_grads + intercept_grads
                     self._optimizer.update_params(params, grads)
