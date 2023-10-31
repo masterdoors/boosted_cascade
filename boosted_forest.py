@@ -412,7 +412,7 @@ class BaseBoostedCascade(BaseGradientBoosting):
                     kfold_estimator = KFoldWrapper(
                         estimator,
                         self.n_splits,
-                        self.C,
+                        self.C*(i*i*10 + 1),
                         1. / self.n_estimators,
                         self.random_state,
                         self.verbose
@@ -421,7 +421,7 @@ class BaseBoostedCascade(BaseGradientBoosting):
                     kfold_estimator = KFoldWrapper(
                         restimator,
                         self.n_splits,
-                        self.C,
+                        self.C*(i*i*10 + 1),
                         1. / self.n_estimators,
                         self.random_state,
                         self.verbose
