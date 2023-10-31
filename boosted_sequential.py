@@ -33,6 +33,10 @@ from sklearn.model_selection import train_test_split
 from joblib import Parallel, delayed
 from sklearn.neural_network._base import DERIVATIVES
 
+from sklearn.decomposition import TruncatedSVD
+import matplotlib.pyplot as plt
+import matplotlib
+
 from sklearn._loss.loss import (
     _LOSSES,
     AbsoluteError,
@@ -79,6 +83,8 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         
         def sigmoid(x):
             return 1. / (1 + np.exp(-x))
+        
+        matplotlib.use('Agg')
 
         binner_ = Binner(
             n_bins=self.n_bins,
@@ -332,7 +338,10 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
             
             residual[:,t] = neg_grad   
         
-        #history.fill(0.)    
+        #history.fill(0.)   
+        non_activated.fill(0.)
+        history_sum.fill(0.)               
+         
         for k in range(K):  
             if loss.n_classes > 2:
                 y = np.array(original_y == k, dtype=np.float64)
@@ -357,13 +366,13 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                 else:
                     aug = np.hstack(aug_part)
                     X_aug[:,t] = hstack([X[:,t], csr_matrix(aug)])
-                                            
+                    
             for eid  in range(self.n_estimators):
                 if eid %2 == 0:
                     kfold_estimator = KFoldWrapper(
                         estimator,
                         self.n_splits,
-                        self.C, # * (i*10 + 1),
+                        self.C, # * (i*i + 1),
                         1. / self.n_estimators,
                         self.random_state,
                         self.hidden_size,
@@ -374,7 +383,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                     kfold_estimator = KFoldWrapper(
                         estimator,#restimator,
                         self.n_splits,
-                        self.C, # * (i*10 + 1),
+                        self.C, # * (i*i + 1),
                         1. / self.n_estimators,
                         self.random_state,
                         self.hidden_size,
@@ -383,15 +392,24 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                     )
                 self.estimators_[i, k].append(kfold_estimator)                           
                 
-                h, na = kfold_estimator.fit(X_aug.reshape(-1,X_aug.shape[2]), residual[:,:, k].reshape(-1,1), y, raw_predictions, raw_predictions_copy.reshape(-1,residual.shape[2]), k, sample_weight)
+                h, na = kfold_estimator.fit(X_aug.reshape(-1,X_aug.shape[2]), residual[:,:, k].reshape(-1,1), y, raw_predictions, raw_predictions_copy.reshape(-1,residual.shape[2]), k, sample_weight,i,eid)
                 history_sum[:,:,:,k] += h.reshape(history_sum[:,:,:,k].shape)
-                non_activated[:,:,:,k] = na.reshape(history_sum[:,:,:,k].shape)     
-            #history[:,:,eid,k] = kfold_estimator.fit(X_aug.reshape(-1,X_aug.shape[2]), residual[:,:, k].reshape(-1,1), y, raw_predictions, raw_predictions_copy.reshape(-1,residual.shape[2]), k, sample_weight)
-            #hr = Parallel(n_jobs=4,backend="threading",require='sharedmem')(delayed(kfoldfitter)(j,self.estimators_[i, k][j],X_aug,residual,y, raw_predictions,raw_predictions_copy,k,sample_weight) for j in range(self.n_estimators))    
-            #for j,h in hr:
-            #    history[:,:,:,k] += h.reshape(history[:,:,:,k].shape)    
-                #kfold_estimator.update_terminal_regions(X_aug, y, raw_predictions, k)
-                    # add tree to ensemble
+                non_activated[:,:,:,k] += na.reshape(history_sum[:,:,:,k].shape)     
+
+        svd = TruncatedSVD(n_components=2)
+        Itr = svd.fit_transform(history_sum.reshape(-1,self.hidden_size))
+        
+        idx_1 = y.flatten() == 0
+        idx_2 = y.flatten() == 1
+        
+        fig, ax = plt.subplots(figsize=(18, 18))
+        
+        ax.scatter(Itr[idx_1, 0], Itr[idx_1, 1], c='red', s=50, edgecolor='k')
+        ax.scatter(Itr[idx_2, 0], Itr[idx_2, 1], c='green', s=50, edgecolor='k')            
+        plt.tight_layout()
+        plt.savefig(str(i) + ".png")
+        plt.close()                    
+                    
         return raw_predictions.reshape(raw_predictions_copy.shape)   
     
     def _raw_predict_init(self, X):

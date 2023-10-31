@@ -17,6 +17,8 @@ from sklearn.metrics import accuracy_score
 
 from joblib import Parallel, delayed
 
+
+
 def kfoldtrain(k,X,y,train_idx, dummy_estimator_,sample_weight):
     estimator = copy.deepcopy(dummy_estimator_)
 
@@ -68,7 +70,7 @@ class KFoldWrapper(object):
         return self.estimators_
 
 
-    def fit(self, X, y, y_, raw_predictions,rp_old,k,sample_weight=None):
+    def fit(self, X, y, y_, raw_predictions,rp_old,k,sample_weight=None,layer = 0, en = 0):
         estimator = copy.deepcopy(self.dummy_estimator_)
         self.lr = []
         
@@ -93,32 +95,7 @@ class KFoldWrapper(object):
             
             I_ = self.getIndicators(estimator, X[train_index], False, False)#False)
             self.lr[i].fit(I_, y_.flatten()[train_index], bias = bias[train_index])#, sample_weight = sample_weight)
-            amb_0 = 0
-            amb_1 = 0
-            total_0 = 0
-            total_1 = 1
-            non_amb = 0
-            for line1 in range(I_.shape[0]):
-                spoiled = False
-                for line2 in range(I_.shape[0]):
-                    if (not np.logical_xor(I_[line1], I_[line2]).sum()) and (y_.flatten()[line1] != y_.flatten()[line2]):    
-                        spoiled = True
-                    if spoiled:
-                        break
-                if  y_.flatten()[line1] == 0:
-                    total_0 += 1
-                else:       
-                    total_1 += 1
-                if spoiled:
-                    if y_.flatten()[line1] == 0:
-                        amb_0 += 1
-                    else:
-                        amb_1 += 1    
-                                
-                        
-            print("Ambiguity ratio 0: ", float(amb_0) / (total_0))            
-            print("Ambiguity ratio 1: ", float(amb_1) / (total_1))            
-    
+
             I = self.getIndicators(estimator, X[test_index], False, False) #, False)
             if len(raw_predictions.shape) == 2:
                 pred[test_index], history[test_index], non_activated[test_index] = self.lr[i].predict_proba(I,  get_non_activated = True)
