@@ -396,19 +396,19 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                 history_sum[:,:,:,k] += h.reshape(history_sum[:,:,:,k].shape)
                 non_activated[:,:,:,k] += na.reshape(history_sum[:,:,:,k].shape)     
 
-        svd = TruncatedSVD(n_components=2)
-        Itr = svd.fit_transform(history_sum.reshape(-1,self.hidden_size))
+        #svd = TruncatedSVD(n_components=2)
+        #Itr = svd.fit_transform(history_sum.reshape(-1,self.hidden_size))
         
-        idx_1 = y.flatten() == 0
-        idx_2 = y.flatten() == 1
+        #idx_1 = y.flatten() == 0
+        #idx_2 = y.flatten() == 1
         
-        fig, ax = plt.subplots(figsize=(18, 18))
+        #fig, ax = plt.subplots(figsize=(18, 18))
         
-        ax.scatter(Itr[idx_1, 0], Itr[idx_1, 1], c='red', s=50, edgecolor='k')
-        ax.scatter(Itr[idx_2, 0], Itr[idx_2, 1], c='green', s=50, edgecolor='k')            
-        plt.tight_layout()
-        plt.savefig(str(i) + ".png")
-        plt.close()                    
+        #ax.scatter(Itr[idx_1, 0], Itr[idx_1, 1], c='red', s=50, edgecolor='k')
+        #ax.scatter(Itr[idx_2, 0], Itr[idx_2, 1], c='green', s=50, edgecolor='k')            
+        #plt.tight_layout()
+        #plt.savefig(str(i) + ".png")
+        #plt.close()                    
                     
         return raw_predictions.reshape(raw_predictions_copy.shape)   
     
@@ -512,7 +512,7 @@ class CascadeSequentialClassifier(ClassifierMixin, BaseSequentialBoostingDummy):
             tol=tol,
             ccp_alpha=ccp_alpha,
         )
-        self.dummy_loss = False
+        self.dummy_loss = True
         self.hidden_size = 20
         self.hidden_activation = 'tanh'
 
