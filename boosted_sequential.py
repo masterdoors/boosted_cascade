@@ -340,7 +340,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         
         #history.fill(0.)   
         non_activated.fill(0.)
-        history_sum.fill(0.)               
+        #history_sum.fill(0.)               
          
         for k in range(K):  
             if loss.n_classes > 2:
