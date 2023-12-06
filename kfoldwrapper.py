@@ -71,15 +71,17 @@ class KFoldWrapper(object):
 
 
     def fit(self, X, y, y_, raw_predictions,rp_old,k,sample_weight=None,layer = 0, en = 0):
-        estimator = copy.deepcopy(self.dummy_estimator_)
+
         self.lr = []
+        self.estimators_ = []
         
         kf = KFold(n_splits=self.n_splits, random_state=None, shuffle=True)
-        #pred = np.zeros((X.shape[0],))
+        pred = np.zeros((X.shape[0],))
         history = np.zeros((X.shape[0],self.hidden_size))
         non_activated = np.zeros((X.shape[0],self.hidden_size))
         
         for i,(train_index, test_index) in enumerate(kf.split(X)):
+            estimator = copy.deepcopy(self.dummy_estimator_)
             # Fit on training samples
             if sample_weight is None:
                 # Notice that a bunch of base estimators do not take
@@ -96,23 +98,23 @@ class KFoldWrapper(object):
             I_ = self.getIndicators(estimator, X[train_index], False, False)#False)
             self.lr[i].fit(I_, y_.flatten()[train_index], bias = bias[train_index])#, sample_weight = sample_weight)
 
-            #I = self.getIndicators(estimator, X[test_index], False, False) #, False)
-            #if len(raw_predictions.shape) == 2:
-            #    pred[test_index], history[test_index], non_activated[test_index] = self.lr[i].predict_proba(I,  get_non_activated = True)
-            #else:
-            #    pred[test_index], history[test_index], non_activated[test_index] = self.lr[i].predict_proba(I, get_non_activated = True)
+            I = self.getIndicators(estimator, X[test_index], False, False) #, False)
+            if len(raw_predictions.shape) == 2:
+                pred[test_index], history[test_index], non_activated[test_index] = self.lr[i].predict_proba(I,  get_non_activated = True)
+            else:
+                pred[test_index], history[test_index], non_activated[test_index] = self.lr[i].predict_proba(I, get_non_activated = True)
 
             self.estimators_.append(estimator)
             
-            #signs = (pred[test_index] + bias[test_index]) >= 0
+            signs = (pred[test_index] + bias[test_index]) >= 0
             
-            #print("KF test acc: ", accuracy_score(y_.flatten()[test_index],signs))
+            print("KF test acc: ", accuracy_score(y_.flatten()[test_index],signs))
             
-            #tp,_,_ = self.lr[i].predict_proba(I_,  get_non_activated = True)
-            #signs = (tp + bias[train_index]) >= 0
-            #print("KF train acc: ", accuracy_score(y_.flatten()[train_index],signs))
+            tp,_,_ = self.lr[i].predict_proba(I_,  get_non_activated = True)
+            signs = (tp + bias[train_index]) >= 0
+            print("KF train acc: ", accuracy_score(y_.flatten()[train_index],signs))
             
-        #pred = pred.reshape(raw_predictions.shape[0],raw_predictions.shape[1])     
+        pred = pred.reshape(raw_predictions.shape[0],raw_predictions.shape[1])     
         history = history.reshape(raw_predictions.shape[0],raw_predictions.shape[1],self.hidden_size)       
         non_activated = non_activated.reshape(raw_predictions.shape[0],raw_predictions.shape[1],self.hidden_size)
         raw_predictions[:,:,k] += self.factor*pred             

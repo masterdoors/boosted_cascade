@@ -222,6 +222,22 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         loss = self._loss
         original_y = y
         
+        def importances(estimators_,X, h):
+            mul =  1.0
+            cnt = 1
+            if estimators_ is not None:
+                for e in estimators_:
+                    for e_ in e.estimators_:
+                        mul += e_.feature_importances_[X.shape[2] + self.hidden_size + h]
+                        cnt += 1   
+                                    
+            if cnt > 1 and mul == 1.0:
+                mul = 0.   
+                print("Zero importance ",h)
+            if cnt > 1 and mul > 0:
+                print ("Non-zero importance ", h, mul)                              
+            return mul / cnt
+        
         estimator = RandomForestRegressor(
             criterion=self.criterion,
             max_depth=self.max_depth,
@@ -279,6 +295,10 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
             K = loss.n_classes
         
         alpha = 1.0
+        
+        imps = []
+        for h in range(self.hidden_size):
+            imps.append(importances(self.estimators_[i-1][0],X, h))
 
         for t in reversed(range(0,X.shape[1])):
             #dummy loss
@@ -305,7 +325,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                             for h in range(self.hidden_size):
                                 for h_ in range(self.hidden_size):
                                     for i_ in range(input_size):
-                                        w[eidx,h_] +=  (1. / wkh[h,0]) * whi[i_,h_]                             
+                                        w[eidx,h_] +=  (1. / wkh[h,0]) * whi[i_,h_] * imps[h]                            
                     else:
                         whi = np.ones((X.shape[2], self.hidden_size))*(1. / (self.hidden_size))
                         wkh = np.ones((self.hidden_size, K))*(1. / (self.hidden_size))
@@ -313,7 +333,8 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                         for h in range(self.hidden_size):
                             for h_ in range(self.hidden_size):
                                 for i_ in range(X.shape[2]):
-                                    w[0,h_] +=  (1. / wkh[h,0]) * whi[i_,h_]  
+                                    w[0,h_] +=  (1. / wkh[h,0]) * whi[i_,h_] * imps[h] 
+                    
                     
                     for j in range(t + 1,X.shape[1]):
                         mult = np.zeros(neg_grad.shape)
@@ -323,11 +344,11 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                         if i > 0:
                             for eidx, e in enumerate(self.estimators_[i-1, 0]):
                                 for h_ in range(self.hidden_size):
-                                    mult +=  w[eidx, h_] * der[:, h_,0]                                 
+                                    mult +=  w[eidx, h_] * der[:, h_,0]                                  
                             mult *= (1. / len(self.estimators_[i-1, 0]))        
                         else:
                             for h_ in range(self.hidden_size):
-                                mult +=  w[0, h_]  * der[:, h_,0] 
+                                mult +=  w[0, h_]  * der[:, h_,0]   
                                 
                         chain *= mult*alpha
                         neg_grad -= chain * loss.gradient(
@@ -512,7 +533,7 @@ class CascadeSequentialClassifier(ClassifierMixin, BaseSequentialBoostingDummy):
             tol=tol,
             ccp_alpha=ccp_alpha,
         )
-        self.dummy_loss = True
+        self.dummy_loss = False
         self.hidden_size = 20
         self.hidden_activation = 'tanh'
 
