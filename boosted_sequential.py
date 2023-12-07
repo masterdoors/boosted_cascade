@@ -223,7 +223,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         original_y = y
         
         def importances(estimators_,X, h):
-            mul =  1.0
+            mul =  0.
             cnt = 1
             if estimators_ is not None:
                 for e in estimators_:
@@ -231,9 +231,10 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                         mul += e_.feature_importances_[X.shape[2] + self.hidden_size + h]
                         cnt += 1   
                                     
-            if cnt > 1 and mul == 1.0:
-                mul = 0.   
+            if cnt > 1 and mul == 0.0:
                 print("Zero importance ",h)
+            if cnt == 1 and mul == 0.0:
+                mul = 1.0
             if cnt > 1 and mul > 0:
                 print ("Non-zero importance ", h, mul)                              
             return mul / cnt
@@ -337,20 +338,24 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                     
                     
                     for j in range(t + 1,X.shape[1]):
-                        mult = np.zeros(neg_grad.shape)
-                        a_t1h = non_activated[:, j]
-                        der = np.ones(a_t1h.shape)
-                        DERIVATIVES[self.hidden_activation](a_t1h, der)                           
-                        if i > 0:
-                            for eidx, e in enumerate(self.estimators_[i-1, 0]):
+                        for l in range(j,X.shape[1]):
+                            mult = np.zeros(neg_grad.shape)    
+                            a_t1h = non_activated[:, l]
+                            der = np.ones(a_t1h.shape)
+                            DERIVATIVES[self.hidden_activation](a_t1h, der) 
+                            
+                            if i > 0:
+                                for eidx, e in enumerate(self.estimators_[i-1, 0]):
+                                    for h_ in range(self.hidden_size):
+                                        mult +=  w[eidx, h_] * der[:, h_,0]                                  
+                                mult *= (1. / len(self.estimators_[i-1, 0]))        
+                            else:
                                 for h_ in range(self.hidden_size):
-                                    mult +=  w[eidx, h_] * der[:, h_,0]                                  
-                            mult *= (1. / len(self.estimators_[i-1, 0]))        
-                        else:
-                            for h_ in range(self.hidden_size):
-                                mult +=  w[0, h_]  * der[:, h_,0]   
-                                
-                        chain *= mult*alpha
+                                    mult +=  w[0, h_]  * der[:, h_,0]   
+                                    
+                            mult[mult > 1.] = 1.
+                            mult[mult < -1.] = -1.
+                            chain *= mult*alpha
                         neg_grad -= chain * loss.gradient(
                             y[:,j].copy(order='C'), raw_predictions_copy[:,j].copy(order='C')) 
             
@@ -414,7 +419,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                 self.estimators_[i, k].append(kfold_estimator)                           
                 
                 h, na = kfold_estimator.fit(X_aug.reshape(-1,X_aug.shape[2]), residual[:,:, k].reshape(-1,1), y, raw_predictions, raw_predictions_copy.reshape(-1,residual.shape[2]), k, sample_weight,i,eid)
-                history_sum[:,:,:,k] += h.reshape(history_sum[:,:,:,k].shape)
+                history_sum[:,:,:,k] = h.reshape(history_sum[:,:,:,k].shape)
                 non_activated[:,:,:,k] += na.reshape(history_sum[:,:,:,k].shape)     
 
         #svd = TruncatedSVD(n_components=2)

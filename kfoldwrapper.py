@@ -100,7 +100,7 @@ class KFoldWrapper(object):
 
             I = self.getIndicators(estimator, X[test_index], False, False) #, False)
             if len(raw_predictions.shape) == 2:
-                pred[test_index], history[test_index], non_activated[test_index] = self.lr[i].predict_proba(I,  get_non_activated = True)
+                pred[test_index], history[test_index], non_activated[test_index] = self.lr[i].predict_proba(I, get_non_activated = True)
             else:
                 pred[test_index], history[test_index], non_activated[test_index] = self.lr[i].predict_proba(I, get_non_activated = True)
 
