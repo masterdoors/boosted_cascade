@@ -70,15 +70,12 @@ class KFoldWrapper(object):
         return self.estimators_
 
 
-    def fit(self, X, y, y_, raw_predictions,rp_old,k,sample_weight=None,layer = 0, en = 0):
+    def fit(self, X, y, y_,history_k,sample_weight=None):
         estimator = copy.deepcopy(self.dummy_estimator_)
         self.lr = []
         
         kf = KFold(n_splits=self.n_splits, random_state=None, shuffle=True)
-        #pred = np.zeros((X.shape[0],))
-        history = np.zeros((X.shape[0],self.hidden_size))
-        non_activated = np.zeros((X.shape[0],self.hidden_size))
-        
+
         for i,(train_index, test_index) in enumerate(kf.split(X)):
             # Fit on training samples
             if sample_weight is None:
@@ -90,17 +87,11 @@ class KFoldWrapper(object):
                     X[train_index], y[train_index].flatten(), sample_weight[train_index]
                 )
              
-            bias = rp_old[:,k]
+            bias = history_k
             self.lr.append(BiasedMLPClassifier(alpha=1./self.C,hidden_layer_sizes=self.hidden_size,activation=self.hidden_activation,verbose=False, max_iter=2000))            
             
             I_ = self.getIndicators(estimator, X[train_index], False, False)#False)
             self.lr[i].fit(I_, y_.flatten()[train_index], bias = bias[train_index])#, sample_weight = sample_weight)
-
-            #I = self.getIndicators(estimator, X[test_index], False, False) #, False)
-            #if len(raw_predictions.shape) == 2:
-            #    pred[test_index], history[test_index], non_activated[test_index] = self.lr[i].predict_proba(I,  get_non_activated = True)
-            #else:
-            #    pred[test_index], history[test_index], non_activated[test_index] = self.lr[i].predict_proba(I, get_non_activated = True)
 
             self.estimators_.append(estimator)
             
@@ -112,12 +103,7 @@ class KFoldWrapper(object):
             #signs = (tp + bias[train_index]) >= 0
             #print("KF train acc: ", accuracy_score(y_.flatten()[train_index],signs))
             
-        #pred = pred.reshape(raw_predictions.shape[0],raw_predictions.shape[1])     
-        history = history.reshape(raw_predictions.shape[0],raw_predictions.shape[1],self.hidden_size)       
-        non_activated = non_activated.reshape(raw_predictions.shape[0],raw_predictions.shape[1],self.hidden_size)
-        raw_predictions[:,:,k] += self.factor*pred             
-            
-        return history, non_activated  
+
             
     def getIndicators(self, estimator, X, sampled = True, do_sample = True):
         Is = []
@@ -151,32 +137,13 @@ class KFoldWrapper(object):
         return np.hstack(Is)            
                     
 
-    def update_terminal_regions(self,e, X, y,raw_predictions, rp_old, sample_weight, k,train_index, test_index, i):
-        bias = rp_old[:,k]
-        self.lr.append(BiasedMLPClassifier(alpha=1./self.C,hidden_layer_sizes=self.hidden_size,activation=self.hidden_activation,verbose=False, max_iter=2000))            
-        
-        I = self.getIndicators(e, X, False, False)[train_index]#False)
-        self.lr[i].fit(I, y.flatten(), bias = bias)#, sample_weight = sample_weight)
-
-        I = self.getIndicators(e, X, False, False)[test_index] #, False)
-        if len(raw_predictions.shape) == 2:
-            pred, hidden, non_activated = self.lr[i].predict_proba(I,  get_non_activated = False)
-            raw_predictions[test_index,k] += self.factor*pred
-        else:
-            pred, hidden, non_activated = self.lr[i].predict_proba(I, get_non_activated = True)
-            pred = pred.reshape(raw_predictions.shape[0],raw_predictions.shape[1])
-            raw_predictions[:,:,k] += self.factor*pred
-               
-        return hidden, non_activated    
-                 
-    
-    def predict(self, X):
+    def predict(self, X,history):
         n_samples, _ = X.shape
         out = np.zeros((n_samples, ))  # pre-allocate results
         hidden = np.zeros((n_samples, self.hidden_size))
         for i, estimator in enumerate(self.estimators_):
             I = self.getIndicators(estimator, X, do_sample = False)
-            out_, hidden_ = self.lr[i].predict_proba(I)  # classification
+            out_, hidden_ = self.lr[i].predict_proba(I,bias=history)  # classification
             out += out_
             hidden += hidden_
         return self.factor * out / self.n_splits, hidden #/ self.n_splits  # return the average prediction

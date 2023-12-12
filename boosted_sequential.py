@@ -209,8 +209,6 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         i,
         X,
         y,
-        raw_predictions,
-        non_activated,
         history_sum,
         sample_weight,
         sample_mask,
@@ -338,10 +336,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
             
             residual[:,t] = neg_grad   
         
-        #history.fill(0.)   
-        non_activated.fill(0.)
-        #history_sum.fill(0.)               
-         
+              
         for k in range(K):  
             if loss.n_classes > 2:
                 y = np.array(original_y == k, dtype=np.float64)
@@ -392,10 +387,10 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                     )
                 self.estimators_[i, k].append(kfold_estimator)                           
                 
-                h, na = kfold_estimator.fit(X_aug.reshape(-1,X_aug.shape[2]), residual[:,:, k].reshape(-1,1), y, raw_predictions, raw_predictions_copy.reshape(-1,residual.shape[2]), k, sample_weight,i,eid)
-                history_sum[:,:,:,k] += h.reshape(history_sum[:,:,:,k].shape)
-                non_activated[:,:,:,k] += na.reshape(history_sum[:,:,:,k].shape)     
-
+                kfold_estimator.fit(X_aug.reshape(-1,X_aug.shape[2]), residual[:,:, k].reshape(-1,1), y, history_sum, sample_weight)
+     
+        self.predict_stage(self, i, X, history_sum) 
+             
         #svd = TruncatedSVD(n_components=2)
         #Itr = svd.fit_transform(history_sum.reshape(-1,self.hidden_size))
         
@@ -427,8 +422,9 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
             raw_predictions = _init_raw_predictions(
                 X, self.init_, self._loss, is_classifier(self)
             )
-        return raw_predictions.reshape(X.shape[0],X.shape[1],-1)    
+        return raw_predictions.reshape(X.shape[0],X.shape[1],-1) 
     
+     
     def predict_stage(self, i, X, raw_predictions, history):
         binned_history = self._bin_data(self.binners[i + 1], history.reshape(raw_predictions.shape[0], -1), is_training_data = False).reshape(history.shape)
         if self._loss.n_classes == 2:
@@ -451,9 +447,9 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                     X_aug[:,t] = hstack([X[:,t], csr_matrix(aug)])
                         
             for _,estimator in enumerate(self.estimators_[i,k]):                            
-                r, h = estimator.predict(X_aug.reshape(-1,X_aug.shape[2]))
+                r, h = estimator.predict(X_aug.reshape(-1,X_aug.shape[2]),history[:,:,:,k])
                 history[:,:,:,k] += h.reshape(history[:,:,:,k].shape)        
-                raw_predictions[:,:,k] += r.reshape(raw_predictions.shape[0],raw_predictions.shape[1])  
+                raw_predictions[:,:,k] = r.reshape(raw_predictions.shape[0],raw_predictions.shape[1])  
         
 class CascadeSequentialClassifier(ClassifierMixin, BaseSequentialBoostingDummy):
     _parameter_constraints: dict = {
@@ -589,7 +585,7 @@ class CascadeSequentialClassifier(ClassifierMixin, BaseSequentialBoostingDummy):
         history = np.repeat((1. / self.hidden_size)*raw_predictions,self.hidden_size, axis=2).reshape(raw_predictions.shape[:2] + (self.hidden_size,) + (raw_predictions.shape[2],))
         X = self._bin_data(self.binners[0], X, False)        
         for i in range(self.n_layers):
-            self.predict_stage(i, X, raw_predictions, history)    
+            self.predict_stage(i, X, raw_predictions, history, i == self.n_layers - 1)    
             #print("test stage:", i,raw_predictions.shape, raw_predictions.max(), raw_predictions.mean(),raw_predictions.min())
 
     def staged_decision_function(self, X):
