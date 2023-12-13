@@ -413,17 +413,11 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                     )
                 self.estimators_[i, k].append(kfold_estimator)                           
                 
-<<<<<<< HEAD
                 kfold_estimator.fit(X_aug.reshape(-1,X_aug.shape[2]), residual[:,:, k].reshape(-1,1), y, history_sum, sample_weight)
      
         self.predict_stage(self, i, X, history_sum) 
              
-=======
-                h, na = kfold_estimator.fit(X_aug.reshape(-1,X_aug.shape[2]), residual[:,:, k].reshape(-1,1), y, raw_predictions, raw_predictions_copy.reshape(-1,residual.shape[2]), k, sample_weight,i,eid)
-                history_sum[:,:,:,k] = h.reshape(history_sum[:,:,:,k].shape)
-                non_activated[:,:,:,k] += na.reshape(history_sum[:,:,:,k].shape)     
 
->>>>>>> 4265f1dacc56c064d56c85a1e6d0e51f90fa6388
         #svd = TruncatedSVD(n_components=2)
         #Itr = svd.fit_transform(history_sum.reshape(-1,self.hidden_size))
         
