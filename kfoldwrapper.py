@@ -74,6 +74,9 @@ class KFoldWrapper(object):
         estimator = copy.deepcopy(self.dummy_estimator_)
         self.lr = []
         self.estimators_ = []
+        n_samples, _ = X.shape
+        out = np.zeros((n_samples, ))  # pre-allocate results
+        hidden = np.zeros((n_samples, self.hidden_size))        
         
         kf = KFold(n_splits=self.n_splits, random_state=None, shuffle=True)
         for i,(train_index, test_index) in enumerate(kf.split(X)):
@@ -95,7 +98,13 @@ class KFoldWrapper(object):
             self.lr[i].fit(I_, y_.flatten()[train_index], bias = bias[train_index])#, sample_weight = sample_weight)
 
             self.estimators_.append(estimator)
+            #TODO add raw predictions again
+            I_ = self.getIndicators(estimator, X[test_index], False, False)
+            out_, hidden_ = self.lr[i].predict_proba(I_,bias=bias[test_index])
+            out[test_index] += out_
+            hidden[test_index,:] += hidden_
             
+        return self.factor * out / self.n_splits, self.factor * hidden / self.n_splits    
             
             
     def getIndicators(self, estimator, X, sampled = True, do_sample = True):
@@ -138,5 +147,6 @@ class KFoldWrapper(object):
             I = self.getIndicators(estimator, X, do_sample = False)
             out_, hidden_ = self.lr[i].predict_proba(I,bias=history)  # classification
             out += out_
-            hidden += hidden_
-        return self.factor * out / self.n_splits, hidden #/ self.n_splits  # return the average prediction
+            hidden += hidden_            
+
+        return self.factor * out / self.n_splits, self.factor * hidden / self.n_splits  # return the average prediction

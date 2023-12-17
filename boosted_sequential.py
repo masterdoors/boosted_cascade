@@ -119,7 +119,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         i = begin_at_stage
         
         history_sum = np.repeat((1. / self.hidden_size)*raw_predictions,self.hidden_size, axis=2).reshape(raw_predictions.shape[:2] + (self.hidden_size,) + (raw_predictions.shape[2],))
-        non_activated = inversed_tanh(history_sum) 
+        #non_activated = inversed_tanh(history_sum) 
 
         for i in range(begin_at_stage, self.n_layers):
             # subsampling
@@ -138,7 +138,6 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                 X_,
                 y,
                 raw_predictions,
-                non_activated,
                 history_sum,
                 sample_weight,
                 sample_mask,
@@ -209,6 +208,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         i,
         X,
         y,
+        raw_predictions,
         history_sum,
         sample_weight,
         sample_mask,
@@ -269,7 +269,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         # because raw_predictions is partially updated at the end of the loop
         # in update_terminal_regions(), and gradients need to be evaluated at
         # iteration i - 1.
-        raw_predictions_copy = raw_predictions.copy()
+
         binner_ = Binner(
             n_bins=self.n_bins,
             bin_subsample=self.bin_subsample,
@@ -295,74 +295,83 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         
         alpha = 1.0
         
-        imps = []
-        for h in range(self.hidden_size):
-            imps.append(importances(self.estimators_[i-1][0],X, h))
+        #imps = []
+        #for h in range(self.hidden_size):
+        #    imps.append(importances(self.estimators_[i-1][0],X, h))
 
         for t in reversed(range(0,X.shape[1])):
             #dummy loss
             neg_grad = - loss.gradient(
-                y[:,t].copy(order='C'), raw_predictions_copy[:,t].copy(order='C') 
+                y[:,t].copy(order='C'), raw_predictions[:,t].copy(order='C') 
             )
             
-            if not self.dummy_loss  and t < X.shape[1]-1:
-                if K > 1: 
-                    pass                    
-                else:
-                    chain = 1.0  
-                    l = 1
-                    if self.estimators_[i-1, 0] is not None:
-                        l = len(self.estimators_[i-1, 0])
-                    w = np.zeros((l, self.hidden_size))
-                    if i > 0:
-                        for eidx, e in enumerate(self.estimators_[i-1, 0]):
-                            input_size = e.lr[0].coefs_[0].shape[0]
-                            
-                            whi = e.lr[0].coefs_[0]
-                            wkh = e.lr[0].coefs_[1]
-                            
-                            for h in range(self.hidden_size):
-                                for h_ in range(self.hidden_size):
-                                    for i_ in range(input_size):
-                                        w[eidx,h_] +=  (1. / wkh[h,0]) * whi[i_,h_] * imps[h]                            
-                    else:
-                        whi = np.ones((X.shape[2], self.hidden_size))*(1. / (self.hidden_size))
-                        wkh = np.ones((self.hidden_size, K))*(1. / (self.hidden_size))
-                     
-                        for h in range(self.hidden_size):
-                            for h_ in range(self.hidden_size):
-                                for i_ in range(X.shape[2]):
-                                    w[0,h_] +=  (1. / wkh[h,0]) * whi[i_,h_] * imps[h] 
-                    
-                    
-                    for j in range(t + 1,X.shape[1]):
-                        for l in range(j,X.shape[1]):
-                            mult = np.zeros(neg_grad.shape)    
-                            a_t1h = non_activated[:, l]
-                            der = np.ones(a_t1h.shape)
-                            DERIVATIVES[self.hidden_activation](a_t1h, der) 
-                            
-                            if i > 0:
-                                for eidx, e in enumerate(self.estimators_[i-1, 0]):
-                                    for h_ in range(self.hidden_size):
-                                        mult +=  w[eidx, h_] * der[:, h_,0]                                  
-                                mult *= (1. / len(self.estimators_[i-1, 0]))        
-                            else:
-                                for h_ in range(self.hidden_size):
-                                    mult +=  w[0, h_]  * der[:, h_,0]   
-                                    
-                            mult[mult > 1.] = 1.
-                            mult[mult < -1.] = -1.
-                            chain *= mult*alpha
-                        neg_grad -= chain * loss.gradient(
-                            y[:,j].copy(order='C'), raw_predictions_copy[:,j].copy(order='C')) 
+            if i > 0:
+                wkh = np.hstack([e.lr[0].coefs_[1] for e in self.estimators_[i-1, 0]]).mean(axis=0)
+            else:
+                wkh = np.ones((self.hidden_size, K))*(1. / (self.hidden_size))  
+                
+            neg_grad = np.dot(neg_grad.reshape(-1,1), wkh.reshape(1,-1)).sum(axis=1)          
+            
+#             if not self.dummy_loss  and t < X.shape[1]-1:
+#                 if K > 1: 
+#                     pass                    
+#                 else:
+#                     chain = 1.0  
+#                     l = 1
+#                     if self.estimators_[i-1, 0] is not None:
+#                         l = len(self.estimators_[i-1, 0])
+#                     w = np.zeros((l, self.hidden_size))
+#                     if i > 0:
+#                         for eidx, e in enumerate(self.estimators_[i-1, 0]):
+#                             input_size = e.lr[0].coefs_[0].shape[0]
+#                             
+#                             whi = e.lr[0].coefs_[0]
+#                             wkh = e.lr[0].coefs_[1]
+#                             
+#                             for h in range(self.hidden_size):
+#                                 for h_ in range(self.hidden_size):
+#                                     for i_ in range(input_size):
+#                                         w[eidx,h_] +=  (1. / wkh[h,0]) * whi[i_,h_] * imps[h]                            
+#                     else:
+#                         whi = np.ones((X.shape[2], self.hidden_size))*(1. / (self.hidden_size))
+#                         wkh = np.ones((self.hidden_size, K))*(1. / (self.hidden_size))
+#                      
+#                         for h in range(self.hidden_size):
+#                             for h_ in range(self.hidden_size):
+#                                 for i_ in range(X.shape[2]):
+#                                     w[0,h_] +=  (1. / wkh[h,0]) * whi[i_,h_] * imps[h] 
+#                     
+#                     
+#                     for j in range(t + 1,X.shape[1]):
+#                         for l in range(j,X.shape[1]):
+#                             mult = np.zeros(neg_grad.shape)    
+#                             a_t1h = non_activated[:, l]
+#                             der = np.ones(a_t1h.shape)
+#                             DERIVATIVES[self.hidden_activation](a_t1h, der) 
+#                             
+#                             if i > 0:
+#                                 for eidx, e in enumerate(self.estimators_[i-1, 0]):
+#                                     for h_ in range(self.hidden_size):
+#                                         mult +=  w[eidx, h_] * der[:, h_,0]                                  
+#                                 mult *= (1. / len(self.estimators_[i-1, 0]))        
+#                             else:
+#                                 for h_ in range(self.hidden_size):
+#                                     mult +=  w[0, h_]  * der[:, h_,0]   
+#                                     
+#                             mult[mult > 1.] = 1.
+#                             mult[mult < -1.] = -1.
+#                             chain *= mult*alpha
+#                         neg_grad -= chain * loss.gradient(
+#                             y[:,j].copy(order='C'), raw_predictions_copy[:,j].copy(order='C')) 
             
             if loss.n_classes == 2:
                 neg_grad = neg_grad.reshape(-1,1)
             
             residual[:,t] = neg_grad   
-        
-              
+            
+        history_sum_copy = history_sum.copy()
+        raw_predictions.fill(0.) 
+        #raw_predictions = np.zeros((y.shape[0], y.shape[1], K))      
         for k in range(K):  
             if loss.n_classes > 2:
                 y = np.array(original_y == k, dtype=np.float64)
@@ -413,9 +422,13 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                     )
                 self.estimators_[i, k].append(kfold_estimator)                           
                 
-                kfold_estimator.fit(X_aug.reshape(-1,X_aug.shape[2]), residual[:,:, k].reshape(-1,1), y, history_sum, sample_weight)
+                raw_predictions_, history_sum_ = kfold_estimator.fit(X_aug.reshape(-1,X_aug.shape[2]),
+                                                                      residual[:,:, k].reshape(-1,1), y,
+                                                                       history_sum_copy[:,:,:,k].reshape(-1,self.hidden_size), sample_weight)
+                raw_predictions[:,:,k] += raw_predictions_.reshape(raw_predictions[:,:,k].shape)
+                history_sum[:,:,:,k] += history_sum_.reshape(history_sum[:,:,:,k].shape)
      
-        self.predict_stage(self, i, X, history_sum) 
+        #self.predict_stage(self, i, X, history_sum) 
              
 
         #svd = TruncatedSVD(n_components=2)
@@ -432,7 +445,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         #plt.savefig(str(i) + ".png")
         #plt.close()                    
                     
-        return raw_predictions.reshape(raw_predictions_copy.shape)   
+        return raw_predictions  
     
     def _raw_predict_init(self, X):
         """Check input and compute raw predictions of the init estimator."""
@@ -453,7 +466,10 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
     
      
     def predict_stage(self, i, X, raw_predictions, history):
-        binned_history = self._bin_data(self.binners[i + 1], history.reshape(raw_predictions.shape[0], -1), is_training_data = False).reshape(history.shape)
+        binned_history = self._bin_data(self.binners[i + 1], history.reshape(raw_predictions.shape[0], -1),
+                                         is_training_data = False).reshape(history.shape)
+        raw_predictions.fill(0.)                                 
+        history_copy = history.copy()
         if self._loss.n_classes == 2:
             K = 1
         else:
@@ -474,9 +490,9 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                     X_aug[:,t] = hstack([X[:,t], csr_matrix(aug)])
                         
             for _,estimator in enumerate(self.estimators_[i,k]):                            
-                r, h = estimator.predict(X_aug.reshape(-1,X_aug.shape[2]),history[:,:,:,k])
+                r, h = estimator.predict(X_aug.reshape(-1,X_aug.shape[2]),history_copy[:,:,:,k].reshape(-1,self.hidden_size))
                 history[:,:,:,k] += h.reshape(history[:,:,:,k].shape)        
-                raw_predictions[:,:,k] = r.reshape(raw_predictions.shape[0],raw_predictions.shape[1])  
+                raw_predictions[:,:,k] += r.reshape(raw_predictions.shape[0],raw_predictions.shape[1])  
         
 class CascadeSequentialClassifier(ClassifierMixin, BaseSequentialBoostingDummy):
     _parameter_constraints: dict = {
@@ -612,7 +628,7 @@ class CascadeSequentialClassifier(ClassifierMixin, BaseSequentialBoostingDummy):
         history = np.repeat((1. / self.hidden_size)*raw_predictions,self.hidden_size, axis=2).reshape(raw_predictions.shape[:2] + (self.hidden_size,) + (raw_predictions.shape[2],))
         X = self._bin_data(self.binners[0], X, False)        
         for i in range(self.n_layers):
-            self.predict_stage(i, X, raw_predictions, history, i == self.n_layers - 1)    
+            self.predict_stage(i, X, raw_predictions, history)    
             #print("test stage:", i,raw_predictions.shape, raw_predictions.max(), raw_predictions.mean(),raw_predictions.min())
 
     def staged_decision_function(self, X):

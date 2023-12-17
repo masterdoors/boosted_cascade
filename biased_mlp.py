@@ -28,7 +28,7 @@ def _pack(coefs_, intercepts_):
     return np.hstack([l.ravel() for l in coefs_ + intercepts_])
 
 class BiasedMLPClassifier(MLPClassifier):
-    def _forward_pass(self, activations, bias = None, raw = False, non_activated = None):
+    def _forward_pass(self, activations, bias = None, raw = False):
         """Perform a forward pass on the network by computing the values
         of the neurons in the hidden layers and the output layer.
 
@@ -42,19 +42,20 @@ class BiasedMLPClassifier(MLPClassifier):
         for i in range(self.n_layers_ - 1):
             activations[i + 1] = safe_sparse_dot(activations[i], self.coefs_[i])
             activations[i + 1] += self.intercepts_[i]
-            if non_activated is not None:
-                non_activated[i + 1] = activations[i + 1].copy()
+            #if non_activated is not None:
+            #    non_activated[i + 1] = activations[i + 1].copy()
             # For the hidden layers
-            if (i + 1) != (self.n_layers_ - 1):
-                hidden_activation(activations[i + 1])
+            #if (i + 1) != (self.n_layers_ - 1):
+            #    hidden_activation(activations[i + 1])
 
             if bias is not None and i + 1 == self.n_layers_ - 2:
-                activations[i + 1] += bias.reshape(-1,1)   
+                #print(activations[i + 1].shape,bias.shape)
+                activations[i + 1] += bias#.reshape(-1,1)   
 
         # For the last layer
-        if not raw:
-            output_activation = ACTIVATIONS[self.out_activation_]
-            output_activation(activations[i + 1])
+        #if not raw:
+        #    output_activation = ACTIVATIONS[self.out_activation_]
+        #    output_activation(activations[i + 1])
         
         return activations    
     
@@ -135,7 +136,7 @@ class BiasedMLPClassifier(MLPClassifier):
             non_activations = activations.copy()
         else:
             non_activations = None       
-        activations = self._forward_pass(activations, raw = True, bias=bias,non_activated = non_activations)
+        activations = self._forward_pass(activations, raw = True, bias=bias)
         
         y_pred = activations[self.n_layers_ - 1]
 
