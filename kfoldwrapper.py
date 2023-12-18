@@ -104,7 +104,7 @@ class KFoldWrapper(object):
             out[test_index] += out_
             hidden[test_index,:] += hidden_
             
-        return self.factor * out / self.n_splits, self.factor * hidden / self.n_splits    
+        return self.factor * out, self.factor * hidden     
             
             
     def getIndicators(self, estimator, X, sampled = True, do_sample = True):

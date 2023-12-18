@@ -293,8 +293,6 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         else:
             K = loss.n_classes
         
-        alpha = 1.0
-        
         #imps = []
         #for h in range(self.hidden_size):
         #    imps.append(importances(self.estimators_[i-1][0],X, h))
@@ -311,58 +309,6 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                 wkh = np.ones((self.hidden_size, K))*(1. / (self.hidden_size))  
                 
             neg_grad = np.dot(neg_grad.reshape(-1,1), wkh.reshape(1,-1)).sum(axis=1)          
-            
-#             if not self.dummy_loss  and t < X.shape[1]-1:
-#                 if K > 1: 
-#                     pass                    
-#                 else:
-#                     chain = 1.0  
-#                     l = 1
-#                     if self.estimators_[i-1, 0] is not None:
-#                         l = len(self.estimators_[i-1, 0])
-#                     w = np.zeros((l, self.hidden_size))
-#                     if i > 0:
-#                         for eidx, e in enumerate(self.estimators_[i-1, 0]):
-#                             input_size = e.lr[0].coefs_[0].shape[0]
-#                             
-#                             whi = e.lr[0].coefs_[0]
-#                             wkh = e.lr[0].coefs_[1]
-#                             
-#                             for h in range(self.hidden_size):
-#                                 for h_ in range(self.hidden_size):
-#                                     for i_ in range(input_size):
-#                                         w[eidx,h_] +=  (1. / wkh[h,0]) * whi[i_,h_] * imps[h]                            
-#                     else:
-#                         whi = np.ones((X.shape[2], self.hidden_size))*(1. / (self.hidden_size))
-#                         wkh = np.ones((self.hidden_size, K))*(1. / (self.hidden_size))
-#                      
-#                         for h in range(self.hidden_size):
-#                             for h_ in range(self.hidden_size):
-#                                 for i_ in range(X.shape[2]):
-#                                     w[0,h_] +=  (1. / wkh[h,0]) * whi[i_,h_] * imps[h] 
-#                     
-#                     
-#                     for j in range(t + 1,X.shape[1]):
-#                         for l in range(j,X.shape[1]):
-#                             mult = np.zeros(neg_grad.shape)    
-#                             a_t1h = non_activated[:, l]
-#                             der = np.ones(a_t1h.shape)
-#                             DERIVATIVES[self.hidden_activation](a_t1h, der) 
-#                             
-#                             if i > 0:
-#                                 for eidx, e in enumerate(self.estimators_[i-1, 0]):
-#                                     for h_ in range(self.hidden_size):
-#                                         mult +=  w[eidx, h_] * der[:, h_,0]                                  
-#                                 mult *= (1. / len(self.estimators_[i-1, 0]))        
-#                             else:
-#                                 for h_ in range(self.hidden_size):
-#                                     mult +=  w[0, h_]  * der[:, h_,0]   
-#                                     
-#                             mult[mult > 1.] = 1.
-#                             mult[mult < -1.] = -1.
-#                             chain *= mult*alpha
-#                         neg_grad -= chain * loss.gradient(
-#                             y[:,j].copy(order='C'), raw_predictions_copy[:,j].copy(order='C')) 
             
             if loss.n_classes == 2:
                 neg_grad = neg_grad.reshape(-1,1)
@@ -429,7 +375,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                 history_sum[:,:,:,k] += history_sum_.reshape(history_sum[:,:,:,k].shape)
      
         #self.predict_stage(self, i, X, history_sum) 
-             
+        print("Dist:", np.linalg.norm(history_sum_copy.flatten()-history_sum.flatten()))     
 
         #svd = TruncatedSVD(n_components=2)
         #Itr = svd.fit_transform(history_sum.reshape(-1,self.hidden_size))
@@ -493,6 +439,9 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                 r, h = estimator.predict(X_aug.reshape(-1,X_aug.shape[2]),history_copy[:,:,:,k].reshape(-1,self.hidden_size))
                 history[:,:,:,k] += h.reshape(history[:,:,:,k].shape)        
                 raw_predictions[:,:,k] += r.reshape(raw_predictions.shape[0],raw_predictions.shape[1])  
+        print("Dist test:", np.linalg.norm(history_copy.flatten()-history.flatten()))     
+        
+                
         
 class CascadeSequentialClassifier(ClassifierMixin, BaseSequentialBoostingDummy):
     _parameter_constraints: dict = {

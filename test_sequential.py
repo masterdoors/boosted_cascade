@@ -11,7 +11,7 @@ from boosted_sequential import CascadeSequentialClassifier
 from sklearn.metrics import log_loss
 import itertools
 
-import tensorflow as tf
+#import tensorflow as tf
 
 from formal_models.pcfg_length_sampling import LengthSampler
 from formal_models.pcfg_tools import (
@@ -144,113 +144,113 @@ def ce_score2(logits, labels):
     #print("test:", logits.shape, logits.max(), logits.mean(),logits.min(),labels.shape )    
     return  ce.mean()#np.exp(ce).mean()  
 
-def make_model(input_shape):
-    input_layer = tf.keras.layers.Input(input_shape)
-    initial_state = tf.keras.layers.Input((20,))
-    output_layer = tf.keras.layers.SimpleRNN(20, return_sequences=True)(input_layer, initial_state=initial_state)
-    output_layer2 = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(2, activation='softmax'))(output_layer)
-
-    return tf.keras.models.Model(inputs=[input_layer] + [initial_state], outputs=output_layer2)
-
-epochs = 100
-batch_size = 10
-
-model = make_model(input_shape=x_train.shape[1:])
-
-model.compile(
-    optimizer="adam",
-    loss="sparse_categorical_crossentropy",
-    metrics=["sparse_categorical_accuracy"],
-)
-
-some_initial_state = np.zeros((x_train.shape[0], 20))
-test_initial_state = np.zeros((x_validate.shape[0], 20))
-
-print("Simple RNN")
-history = model.fit(
-    [x_train] + [some_initial_state],
-    Y_train,
-    batch_size=batch_size,
-    epochs=epochs,
-    verbose=0,
-)
-
-Y_v = model.predict([x_validate] + [test_initial_state])
-
-
-Y_v_labels = Y_v.argmax(axis=2)
-
-print(
-    f"Boosted Cascade Classification report:\n"
-    f"{metrics.classification_report(Y_validate.flatten(), Y_v_labels.flatten())}\n")
-
-#simple_rnn_data.append((str_len, np.log(ce_score(Y_v, Y_validate)) - np.log(low_perp)))
-
-Y_v = model.predict([x_train] + [some_initial_state], batch_size=batch_size)
-
-
-Y_v_labels = Y_v.argmax(axis=2)
-
-print(
-    f"Boosted Cascade Classification report:\n"
-    f"{metrics.classification_report(Y_train.flatten(), Y_v_labels.flatten())}\n")
-
-#simple_rnn_data.append((str_len, np.log(ce_score(Y_v, Y_train)) - np.log(low_perp)))
-#print (simple_rnn_data)
-
-
-print(simple_rnn_data)
-
-def make_model2(input_shape):
-    input_layer = tf.keras.layers.Input(input_shape)
-    dim = tf.zeros([batch_size,20])  
-    output_layer = tf.keras.layers.LSTM(20, return_sequences=True)(input_layer, initial_state=[dim, dim])
-    output_layer2 = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(2, activation='softmax'))(output_layer)    
-
-    return tf.keras.models.Model(inputs=input_layer, outputs=output_layer2)
-
-model = make_model2(input_shape=x_train.shape[1:])
-
-model.compile(
-    optimizer="adam",
-    loss="sparse_categorical_crossentropy",
-    metrics=["sparse_categorical_accuracy"],
-)
-print("LSTM")
-history = model.fit(
-    x_train,
-    Y_train,
-    batch_size=batch_size,
-    epochs=epochs,
-    verbose=0,
-)
-
-Y_v = model.predict(x_validate, batch_size=batch_size)
-
-
-Y_v_labels = Y_v.argmax(axis=2)
-
-print(
-    f"Boosted Cascade Classification report:\n"
-    f"{metrics.classification_report(Y_validate.flatten(), Y_v_labels.flatten())}\n")
-
-#lstm_data.append((str_len, np.log(ce_score(Y_v, Y_validate)) - np.log(low_perp)))
-print (lstm_data)
-
-Y_v = model.predict(x_train, batch_size=batch_size)
-
-
-Y_v_labels = Y_v.argmax(axis=2)
-
-print(
-    f"Boosted Cascade Classification report:\n"
-    f"{metrics.classification_report(Y_train.flatten(), Y_v_labels.flatten())}\n")
-
-#lstm_data.append((str_len, np.log(ce_score(Y_v, Y_train)) - np.log(low_perp)))
-print (lstm_data)
+# def make_model(input_shape):
+#     input_layer = tf.keras.layers.Input(input_shape)
+#     initial_state = tf.keras.layers.Input((20,))
+#     output_layer = tf.keras.layers.SimpleRNN(20, return_sequences=True)(input_layer, initial_state=initial_state)
+#     output_layer2 = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(2, activation='softmax'))(output_layer)
+# 
+#     return tf.keras.models.Model(inputs=[input_layer] + [initial_state], outputs=output_layer2)
+# 
+# epochs = 100
+# batch_size = 10
+# 
+# model = make_model(input_shape=x_train.shape[1:])
+# 
+# model.compile(
+#     optimizer="adam",
+#     loss="sparse_categorical_crossentropy",
+#     metrics=["sparse_categorical_accuracy"],
+# )
+# 
+# some_initial_state = np.zeros((x_train.shape[0], 20))
+# test_initial_state = np.zeros((x_validate.shape[0], 20))
+# 
+# print("Simple RNN")
+# history = model.fit(
+#     [x_train] + [some_initial_state],
+#     Y_train,
+#     batch_size=batch_size,
+#     epochs=epochs,
+#     verbose=0,
+# )
+# 
+# Y_v = model.predict([x_validate] + [test_initial_state])
+# 
+# 
+# Y_v_labels = Y_v.argmax(axis=2)
+# 
+# print(
+#     f"Boosted Cascade Classification report:\n"
+#     f"{metrics.classification_report(Y_validate.flatten(), Y_v_labels.flatten())}\n")
+# 
+# #simple_rnn_data.append((str_len, np.log(ce_score(Y_v, Y_validate)) - np.log(low_perp)))
+# 
+# Y_v = model.predict([x_train] + [some_initial_state], batch_size=batch_size)
+# 
+# 
+# Y_v_labels = Y_v.argmax(axis=2)
+# 
+# print(
+#     f"Boosted Cascade Classification report:\n"
+#     f"{metrics.classification_report(Y_train.flatten(), Y_v_labels.flatten())}\n")
+# 
+# #simple_rnn_data.append((str_len, np.log(ce_score(Y_v, Y_train)) - np.log(low_perp)))
+# #print (simple_rnn_data)
+# 
+# 
+# print(simple_rnn_data)
+# 
+# def make_model2(input_shape):
+#     input_layer = tf.keras.layers.Input(input_shape)
+#     dim = tf.zeros([batch_size,20])  
+#     output_layer = tf.keras.layers.LSTM(20, return_sequences=True)(input_layer, initial_state=[dim, dim])
+#     output_layer2 = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(2, activation='softmax'))(output_layer)    
+# 
+#     return tf.keras.models.Model(inputs=input_layer, outputs=output_layer2)
+# 
+# model = make_model2(input_shape=x_train.shape[1:])
+# 
+# model.compile(
+#     optimizer="adam",
+#     loss="sparse_categorical_crossentropy",
+#     metrics=["sparse_categorical_accuracy"],
+# )
+# print("LSTM")
+# history = model.fit(
+#     x_train,
+#     Y_train,
+#     batch_size=batch_size,
+#     epochs=epochs,
+#     verbose=0,
+# )
+# 
+# Y_v = model.predict(x_validate, batch_size=batch_size)
+# 
+# 
+# Y_v_labels = Y_v.argmax(axis=2)
+# 
+# print(
+#     f"Boosted Cascade Classification report:\n"
+#     f"{metrics.classification_report(Y_validate.flatten(), Y_v_labels.flatten())}\n")
+# 
+# #lstm_data.append((str_len, np.log(ce_score(Y_v, Y_validate)) - np.log(low_perp)))
+# print (lstm_data)
+# 
+# Y_v = model.predict(x_train, batch_size=batch_size)
+# 
+# 
+# Y_v_labels = Y_v.argmax(axis=2)
+# 
+# print(
+#     f"Boosted Cascade Classification report:\n"
+#     f"{metrics.classification_report(Y_train.flatten(), Y_v_labels.flatten())}\n")
+# 
+# #lstm_data.append((str_len, np.log(ce_score(Y_v, Y_train)) - np.log(low_perp)))
+# print (lstm_data)
 
 print("Boosted cascade")
-model = CascadeSequentialClassifier(C=1., n_layers=10, verbose=2, n_estimators = 4, max_depth=2,max_features='sqrt')#, n_iter_no_change = 1, validation_fraction = 0.1)
+model = CascadeSequentialClassifier(C=0.001, n_layers=10, verbose=2, n_estimators = 4, max_depth=2,max_features='sqrt')#, n_iter_no_change = 1, validation_fraction = 0.1)
 
 
 model.fit(x_train, Y_train)#, monitor = monitor)
