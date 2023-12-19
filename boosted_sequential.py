@@ -304,7 +304,14 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
             )
             
             if i > 0:
-                wkh = np.hstack([e.lr[0].coefs_[1] for e in self.estimators_[i-1, 0]]).mean(axis=0)
+                wkh = []
+                for k in range(K):
+                    wkh_ = []
+                    for e in self.estimators_[i-1,k]:
+                        wkh_ += [e.lr[j].coefs_[1].flatten() for j in range(len(e.estimators_))]
+                    wkh_ = np.vstack(wkh_).mean(axis=0)
+                    wkh.append(wkh_) 
+                wkh = np.vstack(wkh)       
             else:
                 wkh = np.ones((self.hidden_size, K))*(1. / (self.hidden_size))  
                 
@@ -317,7 +324,6 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
             
         history_sum_copy = history_sum.copy()
         raw_predictions.fill(0.) 
-        #raw_predictions = np.zeros((y.shape[0], y.shape[1], K))      
         for k in range(K):  
             if loss.n_classes > 2:
                 y = np.array(original_y == k, dtype=np.float64)
@@ -370,7 +376,8 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                 
                 raw_predictions_, history_sum_ = kfold_estimator.fit(X_aug.reshape(-1,X_aug.shape[2]),
                                                                       residual[:,:, k].reshape(-1,1), y,
-                                                                       history_sum_copy[:,:,:,k].reshape(-1,self.hidden_size), sample_weight)
+                                                                       history_sum_copy[:,:,:,k].reshape(-1,self.hidden_size),
+                                                                       sample_weight)
                 raw_predictions[:,:,k] += raw_predictions_.reshape(raw_predictions[:,:,k].shape)
                 history_sum[:,:,:,k] += history_sum_.reshape(history_sum[:,:,:,k].shape)
      
@@ -502,7 +509,7 @@ class CascadeSequentialClassifier(ClassifierMixin, BaseSequentialBoostingDummy):
         )
         self.dummy_loss = False
         self.hidden_size = 20
-        self.hidden_activation = 'tanh'
+        self.hidden_activation = 'identity'
 
     def _encode_y(self, y, sample_weight):
         # encode classes into 0 ... n_classes - 1 and sets attributes classes_

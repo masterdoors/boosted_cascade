@@ -92,11 +92,17 @@ class KFoldWrapper(object):
                 )
              
             bias = history_k
-            self.lr.append(BiasedMLPClassifier(alpha=1./self.C,hidden_layer_sizes=self.hidden_size,activation=self.hidden_activation,verbose=False, max_iter=2000))            
+            self.lr.append(BiasedMLPClassifier(alpha=1./self.C,hidden_layer_sizes=self.hidden_size,
+                                               activation=self.hidden_activation,verbose=False,
+                                                max_iter=10000,
+                                                learning_rate_init=0.0001))            
             
             I_ = self.getIndicators(estimator, X[train_index], False, False)#False)
             self.lr[i].fit(I_, y_.flatten()[train_index], bias = bias[train_index])#, sample_weight = sample_weight)
-
+            out_, hidden_ = self.lr[i].predict_proba(I_,bias=bias[train_index])
+            out_ = np.asarray(out_ >= 0, dtype=int).flatten()
+            print("KF acc:", accuracy_score(out_,y_.flatten()[train_index]))
+            
             self.estimators_.append(estimator)
             #TODO add raw predictions again
             I_ = self.getIndicators(estimator, X[test_index], False, False)
