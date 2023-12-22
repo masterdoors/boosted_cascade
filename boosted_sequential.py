@@ -363,7 +363,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                     )
                 else:
                     kfold_estimator = KFoldWrapper(
-                        estimator,#restimator,
+                        restimator,
                         self.n_splits,
                         self.C, # * (i*i + 1),
                         1. / self.n_estimators,
@@ -382,21 +382,22 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                 history_sum[:,:,:,k] += history_sum_.reshape(history_sum[:,:,:,k].shape)
      
         #self.predict_stage(self, i, X, history_sum) 
-        print("Dist:", np.linalg.norm(history_sum_copy.flatten()-history_sum.flatten()))     
+        print("Hidden Dist:", np.linalg.norm(history_sum_copy.flatten()-history_sum.flatten()))    
+        print("R size:", np.linalg.norm(residual.flatten()))
 
-        #svd = TruncatedSVD(n_components=2)
-        #Itr = svd.fit_transform(history_sum.reshape(-1,self.hidden_size))
+        svd = TruncatedSVD(n_components=2)
+        Itr = svd.fit_transform(history_sum.reshape(-1,self.hidden_size))
         
-        #idx_1 = y.flatten() == 0
-        #idx_2 = y.flatten() == 1
+        idx_1 = y.flatten() == 0
+        idx_2 = y.flatten() == 1
         
-        #fig, ax = plt.subplots(figsize=(18, 18))
+        fig, ax = plt.subplots(figsize=(18, 18))
         
-        #ax.scatter(Itr[idx_1, 0], Itr[idx_1, 1], c='red', s=50, edgecolor='k')
-        #ax.scatter(Itr[idx_2, 0], Itr[idx_2, 1], c='green', s=50, edgecolor='k')            
-        #plt.tight_layout()
-        #plt.savefig(str(i) + ".png")
-        #plt.close()                    
+        ax.scatter(Itr[idx_1, 0], Itr[idx_1, 1], c='red', s=50, edgecolor='k')
+        ax.scatter(Itr[idx_2, 0], Itr[idx_2, 1], c='green', s=50, edgecolor='k')            
+        plt.tight_layout()
+        plt.savefig(str(i) + ".png")
+        plt.close()                    
                     
         return raw_predictions  
     

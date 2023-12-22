@@ -27,31 +27,31 @@ from sklearn import datasets, metrics
 import numpy as np
 from sklearn.model_selection import train_test_split
 
-digits = datasets.load_digits()
+#digits = datasets.load_digits()
 
-n_samples = len(digits.images)
+#n_samples = len(digits.images)
 
-data = digits.images.reshape((n_samples, -1))
+#data = digits.images.reshape((n_samples, -1))
 
-Y =  np.asarray(digits.target).astype('int64')
+#Y =  np.asarray(digits.target).astype('int64')
 
-indexes = np.logical_or(Y == 1, Y == 0)
-data = data[indexes]
-Y = Y[indexes]
+#indexes = np.logical_or(Y == 1, Y == 0)
+#data = data[indexes]
+#Y = Y[indexes]
 
-print (np.unique(Y,return_counts=True))
+#print (np.unique(Y,return_counts=True))
 
 #for i in range(len(Y)):
 #    Y[i] = Y[i] + 1
     
 #print(data.shape)    
 
-x = preprocessing.normalize(data, copy=False, axis = 0).reshape(-1,3,data.shape[1])
-Y = Y.reshape(-1,3)
+#x = preprocessing.normalize(data, copy=False, axis = 0).reshape(-1,3,data.shape[1])
+#Y = Y.reshape(-1,3)
 
-x_train, x_validate, Y_train, Y_validate = train_test_split(
-    x, Y, test_size=0.5, shuffle=True
-)
+#x_train, x_validate, Y_train, Y_validate = train_test_split(
+#    x, Y, test_size=0.5, shuffle=True
+#)
 
 
 #X = np.asarray([[0,0,1,1,0],[1,0,0,0,0],[0,1,0,0,1],[1,0,1,1,0],[1,1,0,0,1],[0,1,1,1,1],[0,0,0,0,0],[1,1,1,1,1]]).reshape(8,5,1)
@@ -79,42 +79,42 @@ simple_rnn_data = []
 lstm_data = []
 str_len = 20# in [20, 40, 60, 80, 100]:
 #    for _ in range(5):
-#grammar = UnmarkedReversalGrammar(2,str_len)
-#remove_epsilon_rules(grammar)
-#remove_unary_rules(grammar)
+grammar = UnmarkedReversalGrammar(2,str_len)
+remove_epsilon_rules(grammar)
+remove_unary_rules(grammar)
 
 
-#sampler = LengthSampler(grammar)
-#generator = random.Random()
+sampler = LengthSampler(grammar)
+generator = random.Random()
 
-#X = np.asarray([list(sampler.sample(str_len, generator))
- #       for i in range(1000)])
+X = np.asarray([list(sampler.sample(str_len, generator))
+        for i in range(1000)])
 #X = polyndrome(7)  
 
 
-#parser = Parser(grammar)
-#low_perp = compute_lower_bound_perplexity(sampler, parser, 1, X)   
+parser = Parser(grammar)
+low_perp = compute_lower_bound_perplexity(sampler, parser, 1, X)   
     
 
 
 
 
-#X_ = np.zeros((X.shape[0], X.shape[1], 2))
-#y = X[:,1:]
+X_ = np.zeros((X.shape[0], X.shape[1], 2))
+y = X[:,1:]
 
-#X_[X == 1,1] = 1.
-#X_[X == 0,0] = 1. 
+X_[X == 1,1] = 1.
+X_[X == 0,0] = 1. 
     
-#X = X_
+X = X_
 
 
-#X = X[:,:-1] 
+X = X[:,:-1] 
 
-#print("Dataset: ", X.shape[0],X.shape[1])
+print("Dataset: ", X.shape[0],X.shape[1])
 
-#x_train, x_validate, Y_train, Y_validate = train_test_split(
-#    X, y, test_size=0.5, shuffle=True
-#)
+x_train, x_validate, Y_train, Y_validate = train_test_split(
+    X, y, test_size=0.5, shuffle=True
+)
 
 #print(Y_train)
 #print(Y_validate)
@@ -250,7 +250,7 @@ def ce_score2(logits, labels):
 # print (lstm_data)
 
 print("Boosted cascade")
-model = CascadeSequentialClassifier(C=1.0, n_layers=10, verbose=2, n_estimators = 4, max_depth=2,max_features='sqrt')#, n_iter_no_change = 1, validation_fraction = 0.1)
+model = CascadeSequentialClassifier(C=10.0, n_layers=10, verbose=2, n_estimators = 4, max_depth=4,max_features='sqrt')#, n_iter_no_change = 1, validation_fraction = 0.1)
 
 
 model.fit(x_train, Y_train)#, monitor = monitor)
@@ -265,7 +265,7 @@ print(
     f"Boosted Cascade Classification report:\n"
     f"{metrics.classification_report(Y_validate.flatten(), Y_v_labels.flatten())}\n")
 
-#print("Cross-entropy diff: ", ce_score2(Y_v, Y_validate) - np.log(low_perp))
+print("Cross-entropy diff: ", ce_score2(Y_v, Y_validate) - np.log(low_perp))
 
 
 Y_v = model.predict_proba(x_train)
@@ -279,7 +279,7 @@ print(
     f"{metrics.classification_report(Y_train.flatten(), Y_v_labels.flatten())}\n")
 
 print("Cross-entropy:", ce_score2(Y_v, Y_train))
-#print("Cross-entropy diff: ", ce_score2(Y_v, Y_train) - np.log(low_perp))
+print("Cross-entropy diff: ", ce_score2(Y_v, Y_train) - np.log(low_perp))
 
 #print (simple_rnn_data)
 #print (lstm_data)

@@ -101,14 +101,16 @@ class KFoldWrapper(object):
             self.lr[i].fit(I_, y_.flatten()[train_index], bias = bias[train_index])#, sample_weight = sample_weight)
             out_, hidden_ = self.lr[i].predict_proba(I_,bias=bias[train_index])
             out_ = np.asarray(out_ >= 0, dtype=int).flatten()
-            print("KF acc:", accuracy_score(out_,y_.flatten()[train_index]))
-            
+            s1 = accuracy_score(out_,y_.flatten()[train_index])
             self.estimators_.append(estimator)
             #TODO add raw predictions again
             I_ = self.getIndicators(estimator, X[test_index], False, False)
             out_, hidden_ = self.lr[i].predict_proba(I_,bias=bias[test_index])
+            
             out[test_index] += out_
             hidden[test_index,:] += hidden_
+            out_ = np.asarray(out_ >= 0, dtype=int).flatten()
+            print("KF acc:", s1, accuracy_score(out_,y_.flatten()[test_index]))            
             
         return self.factor * out, self.factor * hidden     
             
