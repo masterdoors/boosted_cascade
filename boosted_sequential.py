@@ -199,7 +199,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                     loss_history[i % len(loss_history)] = validation_loss
                 else:
                     break
-          
+        
         self.n_layers = i + 1
         return i + 1       
     
@@ -309,7 +309,9 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                     wkh_ = []
                     for e in self.estimators_[i-1,k]:
                         wkh_ += [e.lr[j].coefs_[1].flatten() for j in range(len(e.estimators_))]
-                    wkh_ = np.vstack(wkh_).mean(axis=0)
+                    wkh_ = np.vstack(wkh_)
+                    #print("wkh:",wkh_.min(),wkh_.max())
+                    wkh_ = wkh_.mean(axis=0)
                     wkh.append(wkh_) 
                 wkh = np.vstack(wkh)       
             else:
@@ -322,8 +324,12 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
             
             residual[:,t] = neg_grad   
             
+        
+        #print("R range:", residual.min(), residual.max())            
         history_sum_copy = history_sum.copy()
-        raw_predictions.fill(0.) 
+        raw_predictions.fill(0.)
+        history_sum.fill(0.)
+        
         for k in range(K):  
             if loss.n_classes > 2:
                 y = np.array(original_y == k, dtype=np.float64)
@@ -354,22 +360,24 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                     kfold_estimator = KFoldWrapper(
                         estimator,
                         self.n_splits,
-                        self.C, # * (i*i + 1),
+                        self.C,# * (i*i + 1),
                         1. / self.n_estimators,
                         self.random_state,
                         self.hidden_size,
                         self.hidden_activation,
+                        pow(self.learning_rate, i),
                         self.verbose
                     )
                 else:
                     kfold_estimator = KFoldWrapper(
                         restimator,
                         self.n_splits,
-                        self.C, # * (i*i + 1),
+                        self.C,# * (i*i + 1),
                         1. / self.n_estimators,
                         self.random_state,
                         self.hidden_size,
                         self.hidden_activation,
+                        pow(self.learning_rate, i),
                         self.verbose
                     )
                 self.estimators_[i, k].append(kfold_estimator)                           
@@ -378,26 +386,31 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                                                                       residual[:,:, k].reshape(-1,1), y,
                                                                        history_sum_copy[:,:,:,k].reshape(-1,self.hidden_size),
                                                                        sample_weight)
+                # Warning! This would work for a linear perceptron only.
                 raw_predictions[:,:,k] += raw_predictions_.reshape(raw_predictions[:,:,k].shape)
                 history_sum[:,:,:,k] += history_sum_.reshape(history_sum[:,:,:,k].shape)
      
         #self.predict_stage(self, i, X, history_sum) 
+        #history_sum[:,:,:,:] = np.clip(history_sum,-2.99,2.99)
+        #raw_predictions[:,:,:] = np.clip(raw_predictions,-2.99,2.99)
         print("Hidden Dist:", np.linalg.norm(history_sum_copy.flatten()-history_sum.flatten()))    
-        print("R size:", np.linalg.norm(residual.flatten()))
-
-        svd = TruncatedSVD(n_components=2)
-        Itr = svd.fit_transform(history_sum.reshape(-1,self.hidden_size))
+        #print("R size:", np.linalg.norm(residual.flatten()))
+        #print("Hidden range:", history_sum.min(), history_sum.max()) 
+        print("raw_predictions range", raw_predictions.min(), raw_predictions.max())
+        print("hidden_sum train:", i, history_sum[0,0,:,0][:4])
+        #svd = TruncatedSVD(n_components=2)
+        #Itr = svd.fit_transform(history_sum.reshape(-1,self.hidden_size))
         
-        idx_1 = y.flatten() == 0
-        idx_2 = y.flatten() == 1
+        #idx_1 = y.flatten() == 0
+        #idx_2 = y.flatten() == 1
         
-        fig, ax = plt.subplots(figsize=(18, 18))
+        #fig, ax = plt.subplots(figsize=(18, 18))
         
-        ax.scatter(Itr[idx_1, 0], Itr[idx_1, 1], c='red', s=50, edgecolor='k')
-        ax.scatter(Itr[idx_2, 0], Itr[idx_2, 1], c='green', s=50, edgecolor='k')            
-        plt.tight_layout()
-        plt.savefig(str(i) + ".png")
-        plt.close()                    
+        #ax.scatter(Itr[idx_1, 0], Itr[idx_1, 1], c='red', s=50, edgecolor='k')
+        #ax.scatter(Itr[idx_2, 0], Itr[idx_2, 1], c='green', s=50, edgecolor='k')            
+        #plt.tight_layout()
+        #plt.savefig(str(i) + ".png")
+        #plt.close()                    
                     
         return raw_predictions  
     
@@ -424,6 +437,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                                          is_training_data = False).reshape(history.shape)
         raw_predictions.fill(0.)                                 
         history_copy = history.copy()
+        history.fill(0.) 
         if self._loss.n_classes == 2:
             K = 1
         else:
@@ -447,6 +461,9 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                 r, h = estimator.predict(X_aug.reshape(-1,X_aug.shape[2]),history_copy[:,:,:,k].reshape(-1,self.hidden_size))
                 history[:,:,:,k] += h.reshape(history[:,:,:,k].shape)        
                 raw_predictions[:,:,k] += r.reshape(raw_predictions.shape[0],raw_predictions.shape[1])  
+        #history[:,:,:,:] = np.clip(history,-2.99,2.99)
+        #raw_predictions[:,:,:] = np.clip(raw_predictions,-2.99,2.99)  
+        print("hidden_sum test:", i, history[0,0,:,0][:4])      
         print("Dist test:", np.linalg.norm(history_copy.flatten()-history.flatten()))     
         
                 

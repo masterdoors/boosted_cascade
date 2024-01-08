@@ -28,7 +28,8 @@ def _pack(coefs_, intercepts_):
     return np.hstack([l.ravel() for l in coefs_ + intercepts_])
 
 class BiasedMLPClassifier(MLPClassifier):
-    def _forward_pass(self, activations, bias = None, raw = False):
+
+    def _forward_pass(self, activations, bias = None, raw = False, par_lr = 1.0):
         """Perform a forward pass on the network by computing the values
         of the neurons in the hidden layers and the output layer.
 
@@ -50,7 +51,8 @@ class BiasedMLPClassifier(MLPClassifier):
 
             if bias is not None and i + 1 == self.n_layers_ - 2:
                 #print(activations[i + 1].shape,bias.shape)
-                activations[i + 1] += bias#.reshape(-1,1)   
+                #activations[i + 1] = par_lr * activations[i + 1] + bias#.reshape(-1,1)
+                activations[i + 1] += bias   
 
         # For the last layer
         #if not raw:
@@ -60,7 +62,7 @@ class BiasedMLPClassifier(MLPClassifier):
         return activations    
     
     @_fit_context(prefer_skip_nested_validation=True)
-    def fit(self, X, y, bias = None):
+    def fit(self, X, y, bias = None, par_lr = 1.0):
         """Fit the model to data matrix X and target(s) y.
 
         Parameters
@@ -78,6 +80,7 @@ class BiasedMLPClassifier(MLPClassifier):
             Returns a trained MLP model.
         """
         self.bias = bias
+        self.par_lr = par_lr
         res = self._fit(X, y, incremental=False)
         self.bias = None
         return res   
@@ -114,7 +117,7 @@ class BiasedMLPClassifier(MLPClassifier):
 
         return self._label_binarizer.inverse_transform(y_pred), activations
     
-    def predict_proba(self, X, check_input=True, get_non_activated = False, bias=None):
+    def predict_proba(self, X, check_input=True, get_non_activated = False, bias=None,par_lr = 1.0):
         """Private predict method with optional input validation"""
         if check_input:
             X = self._validate_data(X, accept_sparse=["csr", "csc"], reset=False)
@@ -136,7 +139,7 @@ class BiasedMLPClassifier(MLPClassifier):
             non_activations = activations.copy()
         else:
             non_activations = None       
-        activations = self._forward_pass(activations, raw = True, bias=bias)
+        activations = self._forward_pass(activations, raw = True, bias=bias, par_lr = par_lr)
         
         y_pred = activations[self.n_layers_ - 1]
 
@@ -458,7 +461,7 @@ class BiasedMLPClassifier(MLPClassifier):
         n_samples = X.shape[0]
 
         # Forward propagate
-        activations = self._forward_pass(activations, bias)
+        activations = self._forward_pass(activations, bias, par_lr = self.par_lr)
 
         # Get loss
         loss_func_name = self.loss

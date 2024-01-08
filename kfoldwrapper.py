@@ -49,6 +49,7 @@ class KFoldWrapper(object):
         random_state=None,
         hidden_size = 2,
         hidden_activation = 'tanh',
+        learning_rate = 1.0,
         verbose=1,
     ):
      
@@ -63,6 +64,8 @@ class KFoldWrapper(object):
         self.factor = factor 
         self.hidden_size = hidden_size
         self.hidden_activation = hidden_activation
+        self.learning_rate = learning_rate
+        self.n_splits = 1
 
     @property
     def estimator_(self):
@@ -77,43 +80,58 @@ class KFoldWrapper(object):
         n_samples, _ = X.shape
         out = np.zeros((n_samples, ))  # pre-allocate results
         hidden = np.zeros((n_samples, self.hidden_size))        
-        
-        kf = KFold(n_splits=self.n_splits, random_state=None, shuffle=True)
-        for i,(train_index, test_index) in enumerate(kf.split(X)):
+        #print("y:",y.min(), y.max())
+        #kf = KFold(n_splits=self.n_splits, random_state=None, shuffle=True)
+        #for i,(train_index, test_index) in enumerate(kf.split(X)):
+        for i in range(1):
             estimator = copy.deepcopy(self.dummy_estimator_)
             # Fit on training samples
             if sample_weight is None:
                 # Notice that a bunch of base estimators do not take
                 # `sample_weight` as a valid input.
-                estimator.fit(X[train_index], y[train_index].flatten())
+                
+                #estimator.fit(X[train_index], y[train_index].flatten())
+                estimator.fit(X, y.flatten())
             else:
                 estimator.fit(
-                    X[train_index], y[train_index].flatten(), sample_weight[train_index]
+                    #X[train_index], y[train_index].flatten(), sample_weight[train_index]
+                    X, y.flatten(), sample_weight
                 )
              
             bias = history_k
             self.lr.append(BiasedMLPClassifier(alpha=1./self.C,hidden_layer_sizes=self.hidden_size,
                                                activation=self.hidden_activation,verbose=False,
-                                                max_iter=10000,
-                                                learning_rate_init=0.0001))            
+                                                max_iter=1000000,
+                                                learning_rate_init=0.000001, tol = 0.0000000001))            
             
-            I_ = self.getIndicators(estimator, X[train_index], False, False)#False)
-            self.lr[i].fit(I_, y_.flatten()[train_index], bias = bias[train_index])#, sample_weight = sample_weight)
-            out_, hidden_ = self.lr[i].predict_proba(I_,bias=bias[train_index])
-            out_ = np.asarray(out_ >= 0, dtype=int).flatten()
-            s1 = accuracy_score(out_,y_.flatten()[train_index])
+            #I_ = self.getIndicators(estimator, X[train_index], False, False)#False)
+            I_ = self.getIndicators(estimator, X, False, False)#False)
+            #self.lr[i].fit(I_, y_.flatten()[train_index], bias = bias[train_index], par_lr = self.learning_rate)#, sample_weight = sample_weight)
+            self.lr[i].fit(I_, y_.flatten(), bias = bias,par_lr = self.learning_rate)
+            #out_, hidden_ = self.lr[i].predict_proba(I_,bias=bias[train_index],par_lr = self.learning_rate)
+            #out_, hidden_ = self.lr[i].predict_proba(I_,bias=bias,par_lr = self.learning_rate)
+            #out_ = np.asarray(out_ >= 0, dtype=int).flatten()
+            #s1 = accuracy_score(out_,y_.flatten()[train_index])
+            #s1 = accuracy_score(out_,y_.flatten())
             self.estimators_.append(estimator)
             #TODO add raw predictions again
-            I_ = self.getIndicators(estimator, X[test_index], False, False)
-            out_, hidden_ = self.lr[i].predict_proba(I_,bias=bias[test_index])
+            #I_ = self.getIndicators(estimator, X[test_index], False, False)
+            I_ = self.getIndicators(estimator, X, False, False)
+            #out_, hidden_ = self.lr[i].predict_proba(I_,bias=bias[test_index],par_lr = self.learning_rate)
+            out_, hidden_ = self.lr[i].predict_proba(I_,bias=bias,par_lr = self.learning_rate)
             
-            out[test_index] += out_
-            hidden[test_index,:] += hidden_
-            out_ = np.asarray(out_ >= 0, dtype=int).flatten()
-            print("KF acc:", s1, accuracy_score(out_,y_.flatten()[test_index]))            
+            #out[test_index] += out_
+            #hidden[test_index,:] += hidden_
             
-        return self.factor * out, self.factor * hidden     
+            out += out_
+            hidden += hidden_
             
+            #out_ = np.asarray(out_ >= 0, dtype=int).flatten()
+            #print("KF acc:", s1, accuracy_score(out_,y_.flatten()[test_index]))            
+            #print("KF acc:", s1, accuracy_score(out_,y_.flatten()))
+            
+        return self.factor * out / self.n_splits, self.factor * hidden / self.n_splits    
+
             
     def getIndicators(self, estimator, X, sampled = True, do_sample = True):
         Is = []
@@ -153,7 +171,7 @@ class KFoldWrapper(object):
         hidden = np.zeros((n_samples, self.hidden_size))
         for i, estimator in enumerate(self.estimators_):
             I = self.getIndicators(estimator, X, do_sample = False)
-            out_, hidden_ = self.lr[i].predict_proba(I,bias=history)  # classification
+            out_, hidden_ = self.lr[i].predict_proba(I,bias=history,par_lr = self.learning_rate)  # classification
             out += out_
             hidden += hidden_            
 
