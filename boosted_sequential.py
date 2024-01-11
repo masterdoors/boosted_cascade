@@ -297,6 +297,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         #for h in range(self.hidden_size):
         #    imps.append(importances(self.estimators_[i-1][0],X, h))
 
+        neg_grad_prev = None
         for t in reversed(range(0,X.shape[1])):
             #dummy loss
             neg_grad = - loss.gradient(
@@ -313,7 +314,8 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                     #print("wkh:",wkh_.min(),wkh_.max())
                     wkh_ = wkh_.mean(axis=0)
                     wkh.append(wkh_) 
-                wkh = np.vstack(wkh)       
+                wkh = np.vstack(wkh)
+                
             else:
                 wkh = np.ones((self.hidden_size, K))*(1. / (self.hidden_size))  
                 
@@ -321,10 +323,14 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
             
             if loss.n_classes == 2:
                 neg_grad = neg_grad.reshape(-1,1)
+                
+            if i > 0:
+                if neg_grad_prev is not None:
+                    neg_grad += 0.5 * neg_grad_prev
+                neg_grad_prev = neg_grad                            
             
             residual[:,t] = neg_grad   
-            
-        
+
         #print("R range:", residual.min(), residual.max())            
         history_sum_copy = history_sum.copy()
         raw_predictions.fill(0.)
