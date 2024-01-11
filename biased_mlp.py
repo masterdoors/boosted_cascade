@@ -6,11 +6,14 @@ Created on 18 окт. 2023 г.
 import warnings
 from sklearn.metrics import accuracy_score
 from sklearn.neural_network import MLPClassifier
-from sklearn.neural_network._base import ACTIVATIONS, LOSS_FUNCTIONS, DERIVATIVES 
+from sklearn.neural_network._base import ACTIVATIONS, DERIVATIVES 
 from sklearn.model_selection import train_test_split
 from sklearn.neural_network._stochastic_optimizers import AdamOptimizer, SGDOptimizer
 from sklearn.base import (
     _fit_context, is_classifier)
+
+from scipy.special import expit as logistic_sigmoid
+from scipy.special import xlogy
 
 from sklearn.exceptions import ConvergenceWarning 
 from sklearn.utils import (
@@ -26,6 +29,40 @@ import numpy as np
 def _pack(coefs_, intercepts_):
     """Pack the parameters into a single vector."""
     return np.hstack([l.ravel() for l in coefs_ + intercepts_])
+
+def binary_log_loss(y_true, y_prob):
+    """Compute binary logistic loss for classification.
+
+    This is identical to log_loss in binary classification case,
+    but is kept for its use in multilabel case.
+
+    Parameters
+    ----------
+    y_true : array-like or label indicator matrix
+        Ground truth (correct) labels.
+
+    y_prob : array-like of float, shape = (n_samples, 1)
+        Predicted probabilities, as returned by a classifier's
+        predict_proba method.
+
+    Returns
+    -------
+    loss : float
+        The degree to which the samples are correctly predicted.
+    """
+    eps = np.finfo(y_prob.dtype).eps
+    logistic_sigmoid(y_prob, out=y_prob)
+    y_prob = np.clip(y_prob, eps, 1 - eps)
+    
+    return (
+        -(xlogy(y_true, y_prob).sum() + xlogy(1 - y_true, 1 - y_prob).sum())
+        / y_prob.shape[0]
+    )
+
+LOSS_FUNCTIONS = {
+    "binary_log_loss": binary_log_loss,
+}
+
 
 class BiasedMLPClassifier(MLPClassifier):
 
@@ -51,8 +88,8 @@ class BiasedMLPClassifier(MLPClassifier):
 
             if bias is not None and i + 1 == self.n_layers_ - 2:
                 #print(activations[i + 1].shape,bias.shape)
-                #activations[i + 1] = par_lr * activations[i + 1] + bias#.reshape(-1,1)
-                activations[i + 1] += bias   
+                activations[i + 1] = par_lr * activations[i + 1] + bias#.reshape(-1,1)
+                #activations[i + 1] += bias   
 
         # For the last layer
         #if not raw:
