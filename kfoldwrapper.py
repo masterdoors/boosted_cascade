@@ -17,6 +17,8 @@ from sklearn.metrics import accuracy_score
 
 from joblib import Parallel, delayed
 
+import uuid
+
 
 
 def kfoldtrain(k,X,y,train_idx, dummy_estimator_,sample_weight):
@@ -121,6 +123,11 @@ class KFoldWrapper(object):
             out[test_index] += out_
             hidden[test_index,:] += hidden_
             
+            Isep = self.getIndicatorsSep(estimator, X, False, False)
+            my_id = uuid.uuid4().hex
+            np.save("I" + my_id,Isep)
+            np.save("X" + my_id,X)
+            
             #out += out_
             #hidden += hidden_
             
@@ -130,6 +137,37 @@ class KFoldWrapper(object):
             
         return self.factor * out, self.factor * hidden    
 
+    
+    def getIndicatorsSep(self, estimator, X, sampled = True, do_sample = True):
+        n_samples = X.shape[0]
+        n_samples_bootstrap = _get_n_samples_bootstrap(
+            n_samples,
+            estimator.max_samples,
+        )  
+        idx = estimator.apply(X)
+        for i,clf in enumerate(estimator.estimators_[:1]):
+            if do_sample:
+                if sampled:
+                    indices = _generate_sample_indices(
+                        clf.random_state,
+                        n_samples,
+                        n_samples_bootstrap,
+                    )        
+                else:    
+                    indices = _generate_unsampled_indices(
+                        clf.random_state,
+                        n_samples,
+                        n_samples_bootstrap,
+                    )
+            else:
+                indices = list(range(X.shape[0]))                    
+        
+            I = np.zeros((X.shape[0], clf.tree_.node_count))
+            for j in indices:
+                I[j,idx[j,i]] = 1.0    
+            #Is.append(I)
+        return I       
+    
             
     def getIndicators(self, estimator, X, sampled = True, do_sample = True):
         Is = []

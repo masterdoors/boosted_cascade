@@ -249,7 +249,7 @@ def ce_score2(logits, labels):
 # print (lstm_data)
 
 print("Boosted cascade")
-model = CascadeSequentialClassifier(C=100.0, n_layers=8, verbose=2, n_estimators = 4, max_depth=2,max_features=1.0)#, n_iter_no_change = 1, validation_fraction = 0.1)
+model = CascadeSequentialClassifier(C=100.0, n_layers=2, verbose=2, n_estimators = 4, max_depth=2,max_features=1.0)#, n_iter_no_change = 1, validation_fraction = 0.1)
 
 
 model.fit(x_train, Y_train)#, monitor = monitor)
