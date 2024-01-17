@@ -6,7 +6,7 @@ Created on 18 окт. 2023 г.
 import warnings
 from sklearn.metrics import accuracy_score
 from sklearn.neural_network import MLPClassifier
-from sklearn.neural_network._base import ACTIVATIONS, DERIVATIVES 
+from sklearn.neural_network._base import ACTIVATIONS, inplace_identity_derivative,inplace_tanh_derivative, inplace_logistic_derivative, inplace_relu_derivative    
 from sklearn.model_selection import train_test_split
 from sklearn.neural_network._stochastic_optimizers import AdamOptimizer, SGDOptimizer
 from sklearn.base import (
@@ -19,16 +19,40 @@ from sklearn.exceptions import ConvergenceWarning
 from sklearn.utils import (
     _safe_indexing,
     gen_batches,
-    shuffle)
+    shuffle,
+    check_random_state)
 
 import scipy
 from sklearn.utils.optimize import _check_optimize_result
 from sklearn.utils.extmath import safe_sparse_dot
 import numpy as np
+from itertools import chain
 
 def _pack(coefs_, intercepts_):
     """Pack the parameters into a single vector."""
     return np.hstack([l.ravel() for l in coefs_ + intercepts_])
+
+
+def inplace_softmax_derivative(Z, delta):
+    sm_ = np.zeros(Z.shape)
+    for i in range(Z.shape[1]):
+        for j in range(Z.shape[1]):
+            if i == j:
+                sm_[:,i] += Z[:,i] * (1. - Z[:,j])
+            else:
+                sm_[:,i] +=  - Z[:,i] * Z[:,j]         
+                
+    delta *= sm_
+
+DERIVATIVES = {
+    "identity": inplace_identity_derivative,
+    "tanh": inplace_tanh_derivative,
+    "logistic": inplace_logistic_derivative,
+    "relu": inplace_relu_derivative,
+    "softmax": inplace_softmax_derivative
+}
+
+_STOCHASTIC_SOLVERS = ["sgd", "adam"]
 
 def binary_log_loss(y_true, y_prob):
     """Compute binary logistic loss for classification.
@@ -63,10 +87,9 @@ LOSS_FUNCTIONS = {
     "binary_log_loss": binary_log_loss,
 }
 
+class BiasedRecurrentClassifier(MLPClassifier):
 
-class BiasedMLPClassifier(MLPClassifier):
-
-    def _forward_pass(self, activations, bias = None, raw = False, par_lr = 1.0):
+    def _forward_pass(self, activations, bias = None, par_lr = 1.0):
         """Perform a forward pass on the network by computing the values
         of the neurons in the hidden layers and the output layer.
 
@@ -77,18 +100,34 @@ class BiasedMLPClassifier(MLPClassifier):
         """
 
         # Iterate over the hidden layers
+        for i in range(self.n_layers_ - 1):
+            activations[i + 1] = np.zeros(activations[0].shape[0],activations[0].shape[1],self.layer_units[i])    
+        
         for t in range(activations[0].shape[1]):
             for i in range(self.n_layers_ - 1):
-                activations[i + 1,t] = safe_sparse_dot(activations[i,t], self.coefs_[i])
-                activations[i + 1,t] += self.intercepts_[i]
-
+                hidden_activation = ACTIVATIONS[self.activation[i]]
+                if i == 0:
+                    activations[i + 1][:,t] = safe_sparse_dot(np.hstack([activations[self.n_layers_ - 3][:,t - 1], activations[i][:,t]]), self.coefs_[i])
+                else:
+                    activations[i + 1][:,t] = safe_sparse_dot(activations[i][:,t], self.coefs_[i])    
+                    
+                activations[i + 1][:,t] += self.intercepts_[i]
+                
+                # For the hidden layers
+                if (i + 1) != (self.n_layers_ - 1):
+                    hidden_activation(activations[i + 1][:,t])                  
+                
                 if bias is not None and i + 1 == self.n_layers_ - 2:
-                    if t > 0:
-                        activations[i + 1, t] = par_lr * (activations[i + 1] + activations[i + 1,t - 1]) + bias#.reshape(-1,1) 
-                    else:    
-                        activations[i + 1, t] = par_lr * activations[i + 1] + bias#.reshape(-1,1) 
- 
+                    activations[i + 1][:,t] = par_lr * (activations[i + 1][:,t]) + bias[:,t]#.reshape(-1,1) 
+                        
         return activations    
+    
+    def merge(self, model):
+        self.activation = model.activation + self.activation
+        self.n_layers += model.n_layers
+        self.coefs_ = model.coefs_ + self.coefs_
+        self.intercepts_ = model.intercepts_ + self.intercepts_
+    
     
     @_fit_context(prefer_skip_nested_validation=True)
     def fit(self, X, y, bias = None, par_lr = 1.0):
@@ -275,6 +314,77 @@ class BiasedMLPClassifier(MLPClassifier):
         self.n_iter_ = _check_optimize_result("lbfgs", opt_res, self.max_iter)
         self.loss_ = opt_res.fun
         self._unpack(opt_res.x)
+        
+    def _fit(self, X, y, incremental=False):
+        # Make sure self.hidden_layer_sizes is a list
+        hidden_layer_sizes = self.hidden_layer_sizes
+        if not hasattr(hidden_layer_sizes, "__iter__"):
+            hidden_layer_sizes = [hidden_layer_sizes]
+        hidden_layer_sizes = list(hidden_layer_sizes)
+
+        if np.any(np.array(hidden_layer_sizes) <= 0):
+            raise ValueError(
+                "hidden_layer_sizes must be > 0, got %s." % hidden_layer_sizes
+            )
+        first_pass = not hasattr(self, "coefs_") or (
+            not self.warm_start and not incremental
+        )
+
+
+        n_features = X.shape[2]
+
+        self.n_outputs_ = y.shape[2]
+
+        self.layer_units = [n_features + hidden_layer_sizes[len(hidden_layer_sizes) - 1]] + hidden_layer_sizes + [self.n_outputs_]
+
+        # check random state
+        self._random_state = check_random_state(self.random_state)
+
+        if first_pass:
+            # First time training the model
+            self._initialize(y, self.layer_units, X.dtype)
+
+        # Initialize lists
+        activations = [X] + [None] * (len(self.layer_units) - 1)
+        deltas = [[None]* X.shape[1]] * (len(activations) - 1)
+
+        coef_grads = [
+            np.empty((n_fan_in_, n_fan_out_), dtype=X.dtype)
+            for n_fan_in_, n_fan_out_ in zip(self.layer_units[:-1], self.layer_units[1:])
+        ]
+
+        intercept_grads = [
+            np.empty(n_fan_out_, dtype=X.dtype) for n_fan_out_ in self.layer_units[1:]
+        ]
+
+        # Run the Stochastic optimization solver
+        if self.solver in _STOCHASTIC_SOLVERS:
+            self._fit_stochastic(
+                X,
+                y,
+                activations,
+                deltas,
+                coef_grads,
+                intercept_grads,
+                self.layer_units,
+                incremental,
+            )
+
+        # Run the LBFGS solver
+        elif self.solver == "lbfgs":
+            self._fit_lbfgs(
+                X, y, activations, deltas, coef_grads, intercept_grads, self.layer_units
+            )
+
+        # validate parameter weights
+        weights = chain(self.coefs_, self.intercepts_)
+        if not all(np.isfinite(w).all() for w in weights):
+            raise ValueError(
+                "Solver produced non-finite parameter weights. The input data may"
+                " contain large values and need to be preprocessed."
+            )
+
+        return self        
 
     def _fit_stochastic(
         self,
@@ -452,19 +562,20 @@ class BiasedMLPClassifier(MLPClassifier):
             self.validation_scores_ = self.validation_scores_ 
             
     def _compute_loss_grad(
-        self, layer, n_samples, activations, deltas, coef_grads, intercept_grads
+        self, t, layer, n_samples, activations, deltas, coef_grads, intercept_grads
     ):
         """Compute the gradient of loss with respect to coefs and intercept for
         specified layer.
 
         This function does backpropagation for the specified one layer.
         """
-        coef_grads[layer] = safe_sparse_dot(activations[layer].T, deltas[layer])
-        coef_grads[layer] += self.alpha * self.coefs_[layer]
-        coef_grads[layer] /= n_samples
+        sm = safe_sparse_dot(activations[layer][:,t].T, deltas[layer][t])
+        sm += self.alpha * self.coefs_[layer]
+        sm /= n_samples
+        coef_grads[layer] += sm
 
-        intercept_grads[layer] = np.mean(deltas[layer], 0)            
-            
+        intercept_grads[layer] += np.mean(deltas[layer][t], 0)    
+        
     def _backprop(self, X, y, activations, deltas, coef_grads, intercept_grads, bias):
         """Compute the MLP loss function and its corresponding derivatives
         with respect to each parameter: weights and bias vectors.
@@ -525,23 +636,27 @@ class BiasedMLPClassifier(MLPClassifier):
         # combinations of output activation and loss function:
         # sigmoid and binary cross entropy, softmax and categorical cross
         # entropy, and identity with squared loss
-        deltas[last] = activations[-1] - y
-
-        # Compute gradient for the last layer
-        self._compute_loss_grad(
-            last, n_samples, activations, deltas, coef_grads, intercept_grads
-        )
-
-        inplace_derivative = DERIVATIVES[self.activation]
-        # Iterate over the hidden layers
-        for i in range(self.n_layers_ - 2, 0, -1):
-            deltas[i - 1] = safe_sparse_dot(deltas[i], self.coefs_[i].T)
-            inplace_derivative(activations[i], deltas[i - 1])
-
-            self._compute_loss_grad(
-                i - 1, n_samples, activations, deltas, coef_grads, intercept_grads
-            )
-
-        return loss, coef_grads, intercept_grads                     
+        
+        for t in range(X.shape[1] - 1, -1, -1):
+            deltas[last][t] = logistic_sigmoid(activations[-1][:,t]) - y[:,t]
     
-  
+            # Compute gradient for the last layer
+            self._compute_loss_grad(
+                t, last, n_samples, activations, deltas, coef_grads, intercept_grads
+            )
+    
+            # Iterate over the hidden layers
+            for i in range(self.n_layers_ - 2, 0, -1):
+                inplace_derivative = DERIVATIVES[self.activation[i]]
+                if i == 3 and t < X.shape[1]:
+                    deltas[i - 1][t] = safe_sparse_dot(deltas[i][t] + deltas[0][t + 1][:,:deltas[i][t].shape[1]], self.coefs_[i].T)
+                else:    
+                    deltas[i - 1][t] = safe_sparse_dot(deltas[i][t], self.coefs_[i].T)
+                inplace_derivative(activations[i][:,t], deltas[i - 1][t])        
+                
+                if i >= 3:
+                    self._compute_loss_grad(
+                        t, i - 1, n_samples, activations, deltas, coef_grads, intercept_grads
+                    )
+      
+        return loss, coef_grads, intercept_grads                      
