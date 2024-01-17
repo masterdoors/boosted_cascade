@@ -27,6 +27,8 @@ from sklearn import datasets, metrics
 import numpy as np
 from sklearn.model_selection import train_test_split
 
+from recurrent_network import BiasedRecurrentClassifier
+
 #digits = datasets.load_digits()
 
 #n_samples = len(digits.images)
@@ -249,7 +251,14 @@ def ce_score2(logits, labels):
 # print (lstm_data)
 
 print("Boosted cascade")
-model = CascadeSequentialClassifier(C=100.0, n_layers=2, verbose=2, n_estimators = 4, max_depth=2,max_features=1.0)#, n_iter_no_change = 1, validation_fraction = 0.1)
+#model = CascadeSequentialClassifier(C=100.0, n_layers=2, verbose=2, n_estimators = 4, max_depth=2,max_features=1.0)#, n_iter_no_change = 1, validation_fraction = 0.1)
+model = BiasedRecurrentClassifier(alpha=1./1.,
+                                  hidden_layer_sizes=(28,8,8),
+                                               activation=["logistic","softmax","identity"],
+                                               verbose=False,
+                                                max_iter=1000,
+                                                learning_rate_init=0.001, tol = 0.0001,
+                                                 n_iter_no_change = 100)
 
 
 model.fit(x_train, Y_train)#, monitor = monitor)

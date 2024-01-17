@@ -28,6 +28,8 @@ from sklearn.utils.extmath import safe_sparse_dot
 import numpy as np
 from itertools import chain
 
+from sklearn.preprocessing import LabelBinarizer
+
 def _pack(coefs_, intercepts_):
     """Pack the parameters into a single vector."""
     return np.hstack([l.ravel() for l in coefs_ + intercepts_])
@@ -129,7 +131,6 @@ class BiasedRecurrentClassifier(MLPClassifier):
         self.intercepts_ = model.intercepts_ + self.intercepts_
     
     
-    @_fit_context(prefer_skip_nested_validation=True)
     def fit(self, X, y, bias = None, par_lr = 1.0):
         """Fit the model to data matrix X and target(s) y.
 
@@ -149,6 +150,10 @@ class BiasedRecurrentClassifier(MLPClassifier):
         """
         self.bias = bias
         self.par_lr = par_lr
+        self._label_binarizer = LabelBinarizer()
+        self._label_binarizer.fit(y)
+        self.classes_ = self._label_binarizer.classes_
+        y = self._label_binarizer.transform(y).astype(bool)
         res = self._fit(X, y, incremental=False)
         self.bias = None
         return res   
@@ -333,7 +338,10 @@ class BiasedRecurrentClassifier(MLPClassifier):
 
         n_features = X.shape[2]
 
-        self.n_outputs_ = y.shape[2]
+        if len(y.shape) < 3:
+            self.n_outputs_ = 1
+        else:
+            self.n_outputs_ = y.shape[2]    
 
         self.layer_units = [n_features + hidden_layer_sizes[len(hidden_layer_sizes) - 1]] + hidden_layer_sizes + [self.n_outputs_]
 
