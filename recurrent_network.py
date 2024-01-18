@@ -103,13 +103,17 @@ class BiasedRecurrentClassifier(MLPClassifier):
 
         # Iterate over the hidden layers
         for i in range(self.n_layers_ - 1):
-            activations[i + 1] = np.zeros(activations[0].shape[0],activations[0].shape[1],self.layer_units[i])    
+            activations[i + 1] = np.zeros((activations[0].shape[0],activations[0].shape[1],self.layer_units[i + 1]))    
         
         for t in range(activations[0].shape[1]):
             for i in range(self.n_layers_ - 1):
                 hidden_activation = ACTIVATIONS[self.activation[i]]
                 if i == 0:
-                    activations[i + 1][:,t] = safe_sparse_dot(np.hstack([activations[self.n_layers_ - 3][:,t - 1], activations[i][:,t]]), self.coefs_[i])
+                    if t > 0:
+                        activations[i + 1][:,t] = safe_sparse_dot(np.hstack([activations[self.n_layers_ -  2][:,t - 1], activations[i][:,t]]), self.coefs_[i])
+                    else:
+                        init_add = np.zeros((activations[i][:,t].shape[0],activations[self.n_layers_ - 2][:,t].shape[1])) 
+                        activations[i + 1][:,t] = safe_sparse_dot(np.hstack([init_add, activations[i][:,t]]), self.coefs_[i])                            
                 else:
                     activations[i + 1][:,t] = safe_sparse_dot(activations[i][:,t], self.coefs_[i])    
                     
@@ -192,18 +196,15 @@ class BiasedRecurrentClassifier(MLPClassifier):
     
     def predict_proba(self, X, check_input=True, get_non_activated = False, bias=None,par_lr = 1.0):
         """Private predict method with optional input validation"""
-        if check_input:
-            X = self._validate_data(X, accept_sparse=["csr", "csc"], reset=False)
-
         # Initialize first layer
         hidden_layer_sizes = self.hidden_layer_sizes
         if not hasattr(hidden_layer_sizes, "__iter__"):
             hidden_layer_sizes = [hidden_layer_sizes]
         hidden_layer_sizes = list(hidden_layer_sizes)
 
-        _, n_features = X.shape
+        #n_features = X.shape[2]
 
-        layer_units = [n_features] + hidden_layer_sizes + [self.n_outputs_]
+        layer_units = self.layer_units
 
         # Initialize lists
         activations = [X] + [None] * (len(layer_units) - 1)   
@@ -212,7 +213,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
             non_activations = activations.copy()
         else:
             non_activations = None       
-        activations = self._forward_pass(activations, raw = True, bias=bias, par_lr = par_lr)
+        activations = self._forward_pass(activations, bias=bias, par_lr = par_lr)
         
         y_pred = activations[self.n_layers_ - 1]
 
@@ -353,6 +354,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
             self._initialize(y, self.layer_units, X.dtype)
 
         # Initialize lists
+
         activations = [X] + [None] * (len(self.layer_units) - 1)
         deltas = [[None]* X.shape[1]] * (len(activations) - 1)
 
@@ -570,14 +572,21 @@ class BiasedRecurrentClassifier(MLPClassifier):
             self.validation_scores_ = self.validation_scores_ 
             
     def _compute_loss_grad(
-        self, t, layer, n_samples, activations, deltas, coef_grads, intercept_grads
+        self,t, layer, n_samples, activations, deltas, coef_grads, intercept_grads
     ):
         """Compute the gradient of loss with respect to coefs and intercept for
         specified layer.
 
         This function does backpropagation for the specified one layer.
         """
-        sm = safe_sparse_dot(activations[layer][:,t].T, deltas[layer][t])
+        if layer == 0:
+            if t > 0:
+                sm = safe_sparse_dot(np.hstack([activations[self.n_layers_ -  2][:,t - 1],activations[layer][:,t]]).T, deltas[layer][t])
+            else:
+                init_add = np.zeros((activations[layer][:,t].shape[0],activations[self.n_layers_ - 2][:,t].shape[1]))
+                sm = safe_sparse_dot(np.hstack([init_add, activations[layer][:,t]]).T, deltas[layer][t])    
+        else:    
+            sm = safe_sparse_dot(activations[layer][:,t].T, deltas[layer][t])
         sm += self.alpha * self.coefs_[layer]
         sm /= n_samples
         coef_grads[layer] += sm
@@ -621,6 +630,10 @@ class BiasedRecurrentClassifier(MLPClassifier):
         intercept_grads : list, length = n_layers - 1
         """
         n_samples = X.shape[0]
+        for c in coef_grads:
+            c.fill(0.)
+        for c in intercept_grads:     
+            c.fill(0.)
 
         # Forward propagate
         activations = self._forward_pass(activations, bias, par_lr = self.par_lr)
@@ -646,7 +659,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
         # entropy, and identity with squared loss
         
         for t in range(X.shape[1] - 1, -1, -1):
-            deltas[last][t] = logistic_sigmoid(activations[-1][:,t]) - y[:,t]
+            deltas[last][t] = logistic_sigmoid(activations[-1][:,t]) - y[:,t].reshape(-1,1)
     
             # Compute gradient for the last layer
             self._compute_loss_grad(
@@ -656,15 +669,15 @@ class BiasedRecurrentClassifier(MLPClassifier):
             # Iterate over the hidden layers
             for i in range(self.n_layers_ - 2, 0, -1):
                 inplace_derivative = DERIVATIVES[self.activation[i]]
-                if i == 3 and t < X.shape[1]:
+                if i == 3 and t < X.shape[1] - 1:
                     deltas[i - 1][t] = safe_sparse_dot(deltas[i][t] + deltas[0][t + 1][:,:deltas[i][t].shape[1]], self.coefs_[i].T)
                 else:    
                     deltas[i - 1][t] = safe_sparse_dot(deltas[i][t], self.coefs_[i].T)
                 inplace_derivative(activations[i][:,t], deltas[i - 1][t])        
                 
-                if i >= 3:
-                    self._compute_loss_grad(
-                        t, i - 1, n_samples, activations, deltas, coef_grads, intercept_grads
+                #if i >= 3:
+                self._compute_loss_grad(
+                    t, i - 1, n_samples, activations, deltas, coef_grads, intercept_grads
                     )
       
         return loss, coef_grads, intercept_grads                      
