@@ -669,7 +669,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
             # Iterate over the hidden layers
             for i in range(self.n_layers_ - 2, 0, -1):
                 inplace_derivative = DERIVATIVES[self.activation[i]]
-                if i == 3 and t < X.shape[1] - 1:
+                if i == self.n_layers_ -  2 and t < X.shape[1] - 1:
                     deltas[i - 1][t] = safe_sparse_dot(deltas[i][t] + deltas[0][t + 1][:,:deltas[i][t].shape[1]], self.coefs_[i].T)
                 else:    
                     deltas[i - 1][t] = safe_sparse_dot(deltas[i][t], self.coefs_[i].T)
