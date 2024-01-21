@@ -110,9 +110,11 @@ class BiasedRecurrentClassifier(MLPClassifier):
                 hidden_activation = ACTIVATIONS[self.activation[i]]
                 if i == 0:
                     if t > 0:
-                        activations[i + 1][:,t] = safe_sparse_dot(np.hstack([activations[self.n_layers_ -  2][:,t - 1], activations[i][:,t]]), self.coefs_[i])
+                        #activations[i + 1][:,t] = safe_sparse_dot(np.hstack([activations[self.n_layers_ -  2][:,t - 1], activations[i][:,t]]), self.coefs_[i])
+                        activations[i + 1][:,t] = safe_sparse_dot(np.hstack([activations[i + 1][:,t - 1], activations[i][:,t]]), self.coefs_[i])
                     else:
-                        init_add = np.zeros((activations[i][:,t].shape[0],activations[self.n_layers_ - 2][:,t].shape[1])) 
+                        #init_add = np.zeros((activations[i][:,t].shape[0],activations[self.n_layers_ - 2][:,t].shape[1])) 
+                        init_add = np.zeros((activations[i][:,t].shape[0],activations[i + 1][:,t].shape[1]))
                         activations[i + 1][:,t] = safe_sparse_dot(np.hstack([init_add, activations[i][:,t]]), self.coefs_[i])                            
                 else:
                     activations[i + 1][:,t] = safe_sparse_dot(activations[i][:,t], self.coefs_[i])    
@@ -669,8 +671,10 @@ class BiasedRecurrentClassifier(MLPClassifier):
             # Iterate over the hidden layers
             for i in range(self.n_layers_ - 2, 0, -1):
                 inplace_derivative = DERIVATIVES[self.activation[i]]
-                if i == self.n_layers_ -  2 and t < X.shape[1] - 1:
-                    deltas[i - 1][t] = safe_sparse_dot(deltas[i][t] + deltas[0][t + 1][:,:deltas[i][t].shape[1]], self.coefs_[i].T)
+                #if i == self.n_layers_ -  2 and t < X.shape[1] - 1:
+                if i == 1 and t < X.shape[1] - 1:
+                    deltas[i - 1][t] = safe_sparse_dot(deltas[i][t], self.coefs_[i].T)
+                    deltas[i - 1][t] += safe_sparse_dot(deltas[0][t + 1][:,:deltas[i][t].shape[1]],self.coefs_[0][:deltas[i][t].shape[1],:].T)
                 else:    
                     deltas[i - 1][t] = safe_sparse_dot(deltas[i][t], self.coefs_[i].T)
                 inplace_derivative(activations[i][:,t], deltas[i - 1][t])        

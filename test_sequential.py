@@ -258,7 +258,7 @@ model = BiasedRecurrentClassifier(alpha=1./1000000.,
                                                verbose=True,
                                                 max_iter=1000,
                                                 learning_rate_init=0.001, tol = 0.00001,
-                                                 n_iter_no_change = 10, batch_size=10, epsilon=1e-7)
+                                                 n_iter_no_change = 1000, batch_size=10, epsilon=1e-7)
 
 
 model.fit(x_train, Y_train, bias = np.zeros((X.shape[0],X.shape[1],20)))#, monitor = monitor)
