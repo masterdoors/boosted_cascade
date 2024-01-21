@@ -257,7 +257,7 @@ model = BiasedRecurrentClassifier(alpha=1./1000000.,
                                                activation=["tanh","identity","identity"],
                                                verbose=True,
                                                 max_iter=1000,
-                                                learning_rate_init=0.001, tol = 0.00001,
+                                                learning_rate_init=0.0001, tol = 0.00001,
                                                  n_iter_no_change = 1000, batch_size=10, epsilon=1e-7)
 
 

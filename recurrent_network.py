@@ -583,7 +583,8 @@ class BiasedRecurrentClassifier(MLPClassifier):
         """
         if layer == 0:
             if t > 0:
-                sm = safe_sparse_dot(np.hstack([activations[self.n_layers_ -  2][:,t - 1],activations[layer][:,t]]).T, deltas[layer][t])
+                #sm = safe_sparse_dot(np.hstack([activations[self.n_layers_ -  2][:,t - 1],activations[layer][:,t]]).T, deltas[layer][t])
+                sm = safe_sparse_dot(np.hstack([activations[layer + 1][:,t - 1],activations[layer][:,t]]).T, deltas[layer][t])
             else:
                 init_add = np.zeros((activations[layer][:,t].shape[0],activations[self.n_layers_ - 2][:,t].shape[1]))
                 sm = safe_sparse_dot(np.hstack([init_add, activations[layer][:,t]]).T, deltas[layer][t])    
