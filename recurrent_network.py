@@ -125,7 +125,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
                 if (i + 1) != (self.n_layers_ - 1):
                     hidden_activation(activations[i + 1][:,t])                  
                 
-                if bias is not None and i + 1 == self.n_layers_ - 2:
+                if bias is not None and i + 1 == 1:
                     activations[i + 1][:,t] = par_lr * (activations[i + 1][:,t]) + bias[:,t]#.reshape(-1,1) 
                         
         return activations    
@@ -586,7 +586,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
                 #sm = safe_sparse_dot(np.hstack([activations[self.n_layers_ -  2][:,t - 1],activations[layer][:,t]]).T, deltas[layer][t])
                 sm = safe_sparse_dot(np.hstack([activations[layer + 1][:,t - 1],activations[layer][:,t]]).T, deltas[layer][t])
             else:
-                init_add = np.zeros((activations[layer][:,t].shape[0],activations[self.n_layers_ - 2][:,t].shape[1]))
+                init_add = np.zeros((activations[layer][:,t].shape[0],activations[layer + 1][:,t].shape[1]))
                 sm = safe_sparse_dot(np.hstack([init_add, activations[layer][:,t]]).T, deltas[layer][t])    
         else:    
             sm = safe_sparse_dot(activations[layer][:,t].T, deltas[layer][t])
@@ -663,6 +663,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
         
         for t in range(X.shape[1] - 1, -1, -1):
             deltas[last][t] = logistic_sigmoid(activations[-1][:,t]) - y[:,t].reshape(-1,1)
+            #deltas[last][t] = activations[-1][:,t] - y[:,t].reshape(-1,1)
     
             # Compute gradient for the last layer
             self._compute_loss_grad(
