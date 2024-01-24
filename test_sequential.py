@@ -252,13 +252,13 @@ def ce_score2(logits, labels):
 
 print("Boosted cascade")
 #model = CascadeSequentialClassifier(C=100.0, n_layers=2, verbose=2, n_estimators = 4, max_depth=2,max_features=1.0)#, n_iter_no_change = 1, validation_fraction = 0.1)
-model = BiasedRecurrentClassifier(alpha=1./1000000.,
-                                  hidden_layer_sizes=(20,20),
-                                               activation=["tanh","identity","identity"],
+model = BiasedRecurrentClassifier(alpha=1./10000.,
+                                  hidden_layer_sizes=(20,),
+                                               activation=["tanh","identity"],
                                                verbose=True,
-                                                max_iter=1000,
-                                                learning_rate_init=0.0001, tol = 0.00001,
-                                                 n_iter_no_change = 1000, batch_size=10, epsilon=1e-7)
+                                                max_iter=500,
+                                                learning_rate_init=0.001, tol = 0.000001,
+                                                 n_iter_no_change = 500, batch_size=10, epsilon=1e-7, early_stopping=False)
 
 
 model.fit(x_train, Y_train, bias = np.zeros((X.shape[0],X.shape[1],20)))#, monitor = monitor)

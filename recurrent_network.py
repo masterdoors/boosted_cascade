@@ -590,7 +590,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
                 sm = safe_sparse_dot(np.hstack([init_add, activations[layer][:,t]]).T, deltas[layer][t])    
         else:    
             sm = safe_sparse_dot(activations[layer][:,t].T, deltas[layer][t])
-        sm += self.alpha * self.coefs_[layer]
+        #sm += self.alpha * self.coefs_[layer]
         sm /= n_samples
         coef_grads[layer] += sm
 
@@ -651,7 +651,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
         for s in self.coefs_:
             s = s.ravel()
             values += np.dot(s, s)
-        loss += (0.5 * self.alpha) * values / n_samples
+        #loss += (0.5 * self.alpha) * values / n_samples
 
         # Backward propagate
         last = self.n_layers_ - 2
@@ -662,7 +662,10 @@ class BiasedRecurrentClassifier(MLPClassifier):
         # entropy, and identity with squared loss
         
         for t in range(X.shape[1] - 1, -1, -1):
-            deltas[last][t] = logistic_sigmoid(activations[-1][:,t]) - y[:,t].reshape(-1,1)
+            eps = np.finfo(activations[-1][:,t].dtype).eps
+            y_prob = logistic_sigmoid(activations[-1][:,t])
+            y_prob = np.clip(y_prob, eps, 1 - eps)
+            deltas[last][t] = y_prob - y[:,t].reshape(-1,1)
             #deltas[last][t] = activations[-1][:,t] - y[:,t].reshape(-1,1)
     
             # Compute gradient for the last layer
