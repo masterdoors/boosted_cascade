@@ -27,7 +27,7 @@ from sklearn import datasets, metrics
 import numpy as np
 from sklearn.model_selection import train_test_split
 
-from recurrent_network2 import BiasedRecurrentClassifier
+from recurrent_network import BiasedRecurrentClassifier
 
 #digits = datasets.load_digits()
 
@@ -256,9 +256,9 @@ model = BiasedRecurrentClassifier(alpha=1./10000.,
                                   hidden_layer_sizes=(20,),
                                                activation=["tanh","identity"],
                                                verbose=True,
-                                                max_iter=200,
-                                                learning_rate_init=0.00001, tol = 0.0001,
-                                                 n_iter_no_change = 10, batch_size=200, epsilon=1e-7, early_stopping=False)
+                                                max_iter=500,
+                                                learning_rate_init=0.001, tol = 0.000001,
+                                                 n_iter_no_change = 500, batch_size=10, epsilon=1e-7, early_stopping=False)
 
 
 model.fit(x_train, Y_train, bias = np.zeros((X.shape[0],X.shape[1],20)))#, monitor = monitor)

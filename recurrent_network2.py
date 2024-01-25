@@ -165,7 +165,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
                         activations[i + 1][:,t] += h
                     else:
                         activations[i + 1][:,t] =  h
-                    #activations[i + 1][:,t] += self.intercepts_[self.n_layers_]    
+                    activations[i + 1][:,t] += self.intercepts_[self.n_layers_ - 1]    
                               
                 else:
                     activations[i + 1][:,t] = safe_sparse_dot(activations[i][:,t], self.coefs_[i])    
@@ -649,7 +649,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
         if layer != self.n_layers_ - 1:
             intercept_grads[layer] += np.mean(deltas[layer][t], 0)    
         else:
-            intercept_grads[layer] = np.zeros((1,))    
+            intercept_grads[layer] = np.mean(deltas[0][t], 0) #np.zeros((1,))    
         
     def _backprop(self, X, y, activations, deltas, coef_grads, intercept_grads, bias):
         """Compute the MLP loss function and its corresponding derivatives
@@ -730,7 +730,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
     
             # Iterate over the hidden layers
             for i in range(self.n_layers_ - 2, 0, -1):
-                inplace_derivative = DERIVATIVES[self.activation[i]]
+                inplace_derivative = DERIVATIVES[self.activation[i - 1]]
                 #if i == self.n_layers_ -  2 and t < X.shape[1] - 1:
                 if i == 1 and t < X.shape[1] - 1:
                     deltas[i - 1][t] = safe_sparse_dot(deltas[i][t], self.coefs_[i].T)
