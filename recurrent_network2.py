@@ -91,7 +91,7 @@ LOSS_FUNCTIONS = {
 
 class BiasedRecurrentClassifier(MLPClassifier):
     
-   def _initialize(self, y, layer_units, dtype):
+    def _initialize(self, y, layer_units, dtype):
         # set all attributes, allocate weights etc. for first call
         # Initialize parameters
         self.n_iter_ = 0
@@ -115,12 +115,19 @@ class BiasedRecurrentClassifier(MLPClassifier):
         self.coefs_ = []
         self.intercepts_ = []
 
-        for i in range(self.n_layers_):
+        for i in range(self.n_layers_ - 1):
             coef_init, intercept_init = self._init_coef(
                 layer_units[i], layer_units[i + 1], dtype
             )
             self.coefs_.append(coef_init)
             self.intercepts_.append(intercept_init)
+            
+        coef_init, intercept_init = self._init_coef(
+                layer_units[1], layer_units[1], dtype
+            )        
+        
+        self.coefs_.append(coef_init)
+        self.intercepts_.append(intercept_init)            
 
         if self.solver in _STOCHASTIC_SOLVERS:
             self.loss_curve_ = []
@@ -630,10 +637,11 @@ class BiasedRecurrentClassifier(MLPClassifier):
         This function does backpropagation for the specified one layer.
         """
    
-        sm = safe_sparse_dot(activations[layer][:,t].T, deltas[layer][t])
-        
         if layer == self.n_layers_ - 1:
             sm = safe_sparse_dot(activations[1][:,t - 1].T, deltas[0][t])
+        else:
+            sm = safe_sparse_dot(activations[layer][:,t].T, deltas[layer][t])
+            
         #sm += self.alpha * self.coefs_[layer]
         sm /= n_samples
         coef_grads[layer] += sm
@@ -641,7 +649,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
         if layer != self.n_layers_ - 1:
             intercept_grads[layer] += np.mean(deltas[layer][t], 0)    
         else:
-            intercept_grads[layer] = 0.    
+            intercept_grads[layer] = np.zeros((1,))    
         
     def _backprop(self, X, y, activations, deltas, coef_grads, intercept_grads, bias):
         """Compute the MLP loss function and its corresponding derivatives
@@ -731,11 +739,13 @@ class BiasedRecurrentClassifier(MLPClassifier):
                     deltas[i - 1][t] = safe_sparse_dot(deltas[i][t], self.coefs_[i].T)
                 inplace_derivative(activations[i][:,t], deltas[i - 1][t])        
                 
-                #if i >= 3:
                 self._compute_loss_grad(
-                    t, last + 1, n_samples, activations, deltas, coef_grads, intercept_grads
+                    t, i - 1, n_samples, activations, deltas, coef_grads, intercept_grads
                     )
                 
-        self._compute_loss_grad(t, self.n_layers_, n_samples, activations, deltas, coef_grads, intercept_grads)    
-      
+                
+            self._compute_loss_grad(
+                t, last + 1, n_samples, activations, deltas, coef_grads, intercept_grads
+                )
+                
         return loss, coef_grads, intercept_grads                      
