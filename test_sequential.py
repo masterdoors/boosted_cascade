@@ -27,7 +27,7 @@ from sklearn import datasets, metrics
 import numpy as np
 from sklearn.model_selection import train_test_split
 
-from recurrent_network import BiasedRecurrentClassifier
+from recurrent_network3 import BiasedRecurrentClassifier
 
 #digits = datasets.load_digits()
 
@@ -253,15 +253,15 @@ def ce_score2(logits, labels):
 print("Boosted cascade")
 #model = CascadeSequentialClassifier(C=100.0, n_layers=2, verbose=2, n_estimators = 4, max_depth=2,max_features=1.0)#, n_iter_no_change = 1, validation_fraction = 0.1)
 model = BiasedRecurrentClassifier(alpha=1./10000.,
-                                  hidden_layer_sizes=(20,),
-                                               activation=["tanh","identity"],
+                                  hidden_layer_sizes=(20,20,20),
+                                               activation=["logistic","softmax","identity","identity"],
                                                verbose=True,
-                                                max_iter=500,
-                                                learning_rate_init=0.001, tol = 0.000001,
-                                                 n_iter_no_change = 500, batch_size=10, epsilon=1e-7, early_stopping=False)
+                                                max_iter=3500,
+                                                learning_rate_init=0.01, tol = 0.000001,
+                                                 n_iter_no_change = 3500, batch_size=6, epsilon=1e-7, early_stopping=False)
 
 
-model.fit(x_train, Y_train, bias = np.zeros((X.shape[0],X.shape[1],20)))#, monitor = monitor)
+model.fit(x_train, Y_train, bias = np.zeros((X.shape[0],X.shape[1],20)),recurrent_hidden = 3)#, monitor = monitor)
  
 Y_v,_ = model.predict_proba(x_validate)
 # 

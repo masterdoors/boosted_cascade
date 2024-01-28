@@ -388,9 +388,9 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                     )
                 self.estimators_[i, k].append(kfold_estimator)                           
                 
-                raw_predictions_, history_sum_ = kfold_estimator.fit(X_aug.reshape(-1,X_aug.shape[2]),
-                                                                      residual[:,:, k].reshape(-1,1), y,
-                                                                       history_sum_copy[:,:,:,k].reshape(-1,self.hidden_size),
+                raw_predictions_, history_sum_ = kfold_estimator.fit(X, X_aug,
+                                                                      residual[:,:, k], y,
+                                                                       history_sum_copy[:,:,:,k],
                                                                        sample_weight)
                 # Warning! This would work for a linear perceptron only.
                 raw_predictions[:,:,k] += raw_predictions_.reshape(raw_predictions[:,:,k].shape)

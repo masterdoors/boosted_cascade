@@ -642,7 +642,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
         else:
             sm = safe_sparse_dot(activations[layer][:,t].T, deltas[layer][t])
             
-        #sm += self.alpha * self.coefs_[layer]
+        sm += self.alpha * self.coefs_[layer]
         sm /= n_samples
         coef_grads[layer] += sm
         
@@ -706,7 +706,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
         for s in self.coefs_:
             s = s.ravel()
             values += np.dot(s, s)
-        #loss += (0.5 * self.alpha) * values / n_samples
+        loss += (0.5 * self.alpha) * values / n_samples
 
         # Backward propagate
         last = self.n_layers_ - 2
