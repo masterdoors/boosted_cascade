@@ -106,11 +106,11 @@ class BiasedRecurrentClassifier(MLPClassifier):
         self._label_binarizer.fit(y)
         self.classes_ = self._label_binarizer.classes_
         y = self._label_binarizer.transform(y).astype(bool)
-        mask1 = list(range(recurrent_hidden))
+        mask1 = list(range(recurrent_hidden - 1))
         self._fit(X, I, incremental=False, fit_mask = mask1, predict_mask = mask1)
         ws_tmp = self.warm_start
         self.warm_start = True
-        res = self._fit(X, y, incremental=True, fit_mask = list(range(recurrent_hidden, self.n_layers_)), predict_mask = mask1)
+        res = self._fit(X, y, incremental=True, fit_mask = list(range(recurrent_hidden - 1, self.n_layers_ - 1)), predict_mask = mask1)
         self.warm_start = ws_tmp
         self._prune(mask = mask1)
         self.bias = None
@@ -689,9 +689,6 @@ class BiasedRecurrentClassifier(MLPClassifier):
             values += np.dot(s, s)
         loss += (0.5 * self.alpha) * values / n_samples
 
-        # Backward propagate
-        last = self.n_layers_ - 2
-
         # The calculation of delta[last] here works with following
         # combinations of output activation and loss function:
         # sigmoid and binary cross entropy, softmax and categorical cross
@@ -701,12 +698,15 @@ class BiasedRecurrentClassifier(MLPClassifier):
             layer_range = sorted(list(predict_mask),reverse=True)
         else:    
             layer_range = list(range(self.n_layers_ - 2, -1, -1))
+
+        # Backward propagate
+        last = layer_range[0]
             
         for t in range(X.shape[1] - 1, -1, -1):
-            eps = np.finfo(activations[-1][:,t].dtype).eps
-            y_prob = logistic_sigmoid(activations[-1][:,t])
+            eps = np.finfo(activations[last][:,t].dtype).eps
+            y_prob = logistic_sigmoid(activations[last][:,t])
             y_prob = np.clip(y_prob, eps, 1 - eps)
-            deltas[last][t] = y_prob - y[:,t].reshape(-1,1)
+            deltas[last][t] = (y_prob - y[:,t])#.reshape(-1,1)
             #deltas[last][t] = activations[-1][:,t] - y[:,t].reshape(-1,1)
     
             # Compute gradient for the last layer
@@ -715,7 +715,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
             )
     
             # Iterate over the hidden layers
-            for n,i in enumerate(layer_range[:-1]):
+            for n,i in enumerate(layer_range[1:]):
                 prev_i = layer_range[n + 1]
                 inplace_derivative = DERIVATIVES[self.activation[i - 1]]
                 #if i == self.n_layers_ -  2 and t < X.shape[1] - 1:
