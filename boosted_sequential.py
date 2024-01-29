@@ -37,6 +37,8 @@ from sklearn.decomposition import TruncatedSVD
 import matplotlib.pyplot as plt
 import matplotlib
 
+from recurrent_network3 import BiasedRecurrentClassifier
+
 from sklearn._loss.loss import (
     _LOSSES,
     AbsoluteError,
@@ -263,7 +265,15 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
             ccp_alpha=self.ccp_alpha,
             n_estimators=100,
             n_jobs=2
-        )        
+        )    
+        
+        network = BiasedRecurrentClassifier(alpha=1./10000.,
+                                  hidden_layer_sizes=(20,20,20),
+                                               activation=["logistic","softmax","identity","identity"],
+                                               verbose=True,
+                                                max_iter=3500,
+                                                learning_rate_init=0.01, tol = 0.000001,
+                                                 n_iter_no_change = 3500, batch_size=6, epsilon=1e-7, early_stopping=False)    
 
         # Need to pass a copy of raw_predictions to negative_gradient()
         # because raw_predictions is partially updated at the end of the loop
@@ -365,6 +375,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                 if eid %2 == 0:
                     kfold_estimator = KFoldWrapper(
                         estimator,
+                        network,
                         self.n_splits,
                         self.C,# * (i*i + 1),
                         1. / self.n_estimators,
@@ -377,6 +388,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                 else:
                     kfold_estimator = KFoldWrapper(
                         restimator,
+                        network,
                         self.n_splits,
                         self.C,# * (i*i + 1),
                         1. / self.n_estimators,
@@ -392,7 +404,6 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                                                                       residual[:,:, k], y,
                                                                        history_sum_copy[:,:,:,k],
                                                                        sample_weight)
-                # Warning! This would work for a linear perceptron only.
                 raw_predictions[:,:,k] += raw_predictions_.reshape(raw_predictions[:,:,k].shape)
                 history_sum[:,:,:,k] += history_sum_.reshape(history_sum[:,:,:,k].shape)
      

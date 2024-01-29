@@ -99,6 +99,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
         del self.layer_units[mask]
     
     def dual_fit(self,X,y,I, bias = None, par_lr = 1.0, recurrent_hidden = 3):
+        self.recurrent_hidden = recurrent_hidden
         self.bias = bias
         self.par_lr = par_lr
         self._label_binarizer = LabelBinarizer()
@@ -111,7 +112,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
         self.warm_start = True
         res = self._fit(X, y, incremental=True, fit_mask = list(range(recurrent_hidden, self.n_layers_)), predict_mask = mask1)
         self.warm_start = ws_tmp
-        self._prune(mask = [])
+        self._prune(mask = mask1)
         self.bias = None
         return res 
 

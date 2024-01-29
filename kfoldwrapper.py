@@ -8,12 +8,8 @@ import copy
 import numpy as np
 from sklearn.model_selection import KFold
 
-from recurrent_network3 import BiasedRecurrentClassifier
 from sklearn.metrics import accuracy_score
 from mixed_model import MixedModel
-
-
-
 
 def kfoldtrain(k,X,y,train_idx, dummy_estimator_,sample_weight):
     estimator = copy.deepcopy(dummy_estimator_)
@@ -46,7 +42,8 @@ class KFoldWrapper(object):
 
     def __init__(
         self,
-        estimator,
+        forest_estimator,
+        network_estimator,
         n_splits,
         C=1.0,
         factor = 0.5,
@@ -58,7 +55,8 @@ class KFoldWrapper(object):
     ):
      
         # Parameters were already validated by upstream methods
-        self.dummy_estimator_ = estimator
+        self.dummy_estimator_f = forest_estimator
+        self.dummy_estimator_n = network_estimator
         self.n_splits = n_splits
         self.random_state = random_state
         self.verbose = verbose
@@ -77,10 +75,9 @@ class KFoldWrapper(object):
 
 
     def fit(self, X_,X, y, y_,history_k,sample_weight=None):
-        estimator = copy.deepcopy(self.dummy_estimator_)
         self.lr = []
         self.estimators_ = []
-        n_samples, _ = X.shape
+        n_samples = X.shape[0]
         out = np.zeros((n_samples, ))  # pre-allocate results
         hidden = np.zeros((n_samples, self.hidden_size))        
         #print("y:",y.min(), y.max())
@@ -88,7 +85,10 @@ class KFoldWrapper(object):
         for train_index, test_index in kf.split(X):
             bias = history_k
             estimator = MixedModel(self.dummy_estimator_f, self.dummy_estimator_n, max_iter = 10,learning_rate = self.learning_rate)
-            estimator.fit(X[train_index],y[train_index],X_[train_index],y_[train_index],bias[train_index],sample_weight[train_index]) 
+            if sample_weight is not None:
+                estimator.fit(X[train_index],y[train_index],X_[train_index],y_[train_index],bias[train_index],sample_weight[train_index])
+            else:
+                estimator.fit(X[train_index],y[train_index],X_[train_index],y_[train_index],bias[train_index])     
             self.estimators_.append(estimator)
             out_, hidden_ = estimator.predict_proba(X_[test_index],bias=bias[test_index],learning_rate = self.learning_rate)
             
