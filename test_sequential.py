@@ -261,7 +261,7 @@ model = CascadeSequentialClassifier(C=100.0, n_layers=1, verbose=2, n_estimators
 #                                                 n_iter_no_change = 3500, batch_size=6, epsilon=1e-7, early_stopping=False)
 
 
-model.fit(x_train, Y_train)#, monitor = monitor)
+model.fit(x_train, Y_train)#,bias = np.zeros((x_train.shape[0],x_train.shape[1],20)), recurrent_hidden = 3)#, monitor = monitor)
  
 Y_v,_ = model.predict_proba(x_validate)
 # 

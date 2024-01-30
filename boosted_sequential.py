@@ -269,10 +269,10 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         
         network = BiasedRecurrentClassifier(alpha=1./10000.,
                                   hidden_layer_sizes=(20,20,20),
-                                               activation=["logistic","softmax","identity","identity"],
+                                               activation=["tanh","logistic","identity","identity"],
                                                verbose=True,
                                                 max_iter=3500,
-                                                learning_rate_init=0.01, tol = 0.000001,
+                                                learning_rate_init=0.001, tol = 0.000001,
                                                  n_iter_no_change = 3500, batch_size=6, epsilon=1e-7, early_stopping=False)    
 
         # Need to pass a copy of raw_predictions to negative_gradient()
@@ -400,7 +400,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                     )
                 self.estimators_[i, k].append(kfold_estimator)                           
                 
-                raw_predictions_, history_sum_ = kfold_estimator.fit(X, X_aug,
+                raw_predictions_, history_sum_ = kfold_estimator.fit(X.astype(float), X_aug.astype(float),
                                                                       residual[:,:, k], y,
                                                                        history_sum_copy[:,:,:,k],
                                                                        sample_weight)

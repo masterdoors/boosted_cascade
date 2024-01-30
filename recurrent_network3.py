@@ -116,7 +116,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
         self.bias = None
         return res 
 
-    def _forward_pass(self, activations, bias = None, par_lr = 1.0, mask = None):
+    def _forward_pass(self, activations, bias = None, par_lr = 1.0):
         """Perform a forward pass on the network by computing the values
         of the neurons in the hidden layers and the output layer.
 
@@ -125,18 +125,15 @@ class BiasedRecurrentClassifier(MLPClassifier):
         activations : list, length = n_layers - 1
             The ith element of the list holds the values of the ith layer.
         """
-        if mask is not None:
-            layer_range = sorted(list(mask))
-        else:
-            layer_range = list(range(self.n_layers_))
+        layer_range_all = list(range(self.n_layers_))
                 
         # Iterate over the hidden layers
         for i in range(self.n_layers_ - 1):
             activations[i + 1] = np.zeros((activations[0].shape[0],activations[0].shape[1],self.layer_units[i + 1]))    
         
         for t in range(activations[0].shape[1]):
-            for n,i in enumerate(layer_range[:-1]):
-                next_i = layer_range[n + 1]
+            for n,i in enumerate(layer_range_all[:-1]):
+                next_i = layer_range_all[n + 1]
                 hidden_activation = ACTIVATIONS[self.activation[i]]
                 if i == 0:
                     if t > 0:
@@ -675,7 +672,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
             c.fill(0.)
 
         # Forward propagate
-        activations = self._forward_pass(activations, bias, par_lr = self.par_lr, mask = predict_mask)
+        activations = self._forward_pass(activations, bias, par_lr = self.par_lr)#, mask = predict_mask)
 
         # Get loss
         loss_func_name = self.loss
@@ -703,10 +700,14 @@ class BiasedRecurrentClassifier(MLPClassifier):
         last = layer_range[0]
             
         for t in range(X.shape[1] - 1, -1, -1):
-            eps = np.finfo(activations[last][:,t].dtype).eps
-            y_prob = logistic_sigmoid(activations[last][:,t])
-            y_prob = np.clip(y_prob, eps, 1 - eps)
-            deltas[last][t] = (y_prob - y[:,t])#.reshape(-1,1)
+            if last == self.n_layers_ - 2:
+                eps = np.finfo(activations[last][:,t].dtype).eps
+                y_prob = logistic_sigmoid(activations[last + 1][:,t])
+                y_prob = np.clip(y_prob, eps, 1 - eps)
+            else:
+                y_prob = activations[last + 1][:,t]
+                    
+            deltas[last][t] = (y_prob - y[:,t].reshape(y_prob.shape))#.reshape(-1,1)
             #deltas[last][t] = activations[-1][:,t] - y[:,t].reshape(-1,1)
     
             # Compute gradient for the last layer
@@ -715,7 +716,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
             )
     
             # Iterate over the hidden layers
-            for n,i in enumerate(layer_range[1:]):
+            for n,i in enumerate(layer_range[:-1]):
                 prev_i = layer_range[n + 1]
                 inplace_derivative = DERIVATIVES[self.activation[i - 1]]
                 #if i == self.n_layers_ -  2 and t < X.shape[1] - 1:
@@ -732,6 +733,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
                     )
         if fit_mask is not None:
             rem = set(range(self.n_layers_ - 1)).difference(fit_mask)
-            coef_grads[rem] = 0.
-            intercept_grads[rem] = 0.     
+            for r in rem:
+                coef_grads[r] = np.zeros(coef_grads[r].shape)
+                intercept_grads[r] = np.zeros(intercept_grads[r].shape)     
         return loss, coef_grads, intercept_grads                      
