@@ -59,7 +59,8 @@ class MixedModel:
                 
         
         I = self.getIndicators(self.forest, X.reshape(-1,X.shape[2]), False, False)        
-        for _ in range(self.max_iter):
+        for i in range(self.max_iter):
+            print ("Outer loop iter: ", i)
             self.network.hidden_layer_sizes = (I.shape[1],) + (I.shape[1],) + (self.network.hidden_layer_sizes[2],)
             self.network.dual_fit(X_, y_, I.reshape((y_.shape[0],y_.shape[1],-1)),
                                    bias = bias, par_lr = self.learning_rate,
@@ -73,7 +74,7 @@ class MixedModel:
     
     def predict_proba(self, X, bias, returnI = False ):
         res = np.zeros((X.shape[0],X.shape[1]))
-        hidden = np.zeros((X.shape[0],X.shape[1],self.network._coeffs[0].shape[0]))
+        hidden = np.zeros((X.shape[0],X.shape[1],self.network.coefs_[0].shape[1]))
         I_list = []
         for t in range(X.shape[1]):
             if t > 0:

@@ -92,11 +92,56 @@ LOSS_FUNCTIONS = {
 
 class BiasedRecurrentClassifier(MLPClassifier):
     def _prune(self, mask = []):
+        mask = set(mask)
         self.n_layers_ -= len(mask)
-        del self.coefs_[mask]
-        del self.intercepts_[mask]
-        del self.activation[mask]
-        del self.layer_units[mask]
+        self.recurrent_hidden -= len(mask)
+        self.coefs_ = [c for i,c in enumerate(self.coefs_) if i not in mask]
+        self.intercepts_ = [c for i,c in enumerate(self.intercepts_) if i not in mask]
+        self.activation = [c for i,c in enumerate(self.activation) if i not in mask]
+        self.layer_units = [c for i,c in enumerate(self.layer_units) if i not in mask]
+        
+    def _initialize(self, y, layer_units, dtype):
+        # set all attributes, allocate weights etc. for first call
+        # Initialize parameters
+        self.n_iter_ = 0
+        self.t_ = 0
+        #self.n_outputs_ = y.shape[1]
+
+        # Compute the number of layers
+        self.n_layers_ = len(layer_units)
+
+        # Output for regression
+        if not is_classifier(self):
+            self.out_activation_ = "identity"
+        # Output for multi class
+        elif self._label_binarizer.y_type_ == "multiclass":
+            self.out_activation_ = "softmax"
+        # Output for binary class and multi-label
+        else:
+            self.out_activation_ = "logistic"
+
+        # Initialize coefficient and intercept layers
+        self.coefs_ = []
+        self.intercepts_ = []
+
+        for i in range(self.n_layers_ - 1):
+            coef_init, intercept_init = self._init_coef(
+                layer_units[i], layer_units[i + 1], dtype
+            )
+            self.coefs_.append(coef_init)
+            self.intercepts_.append(intercept_init)
+
+        if self.solver in _STOCHASTIC_SOLVERS:
+            self.loss_curve_ = []
+            self._no_improvement_count = 0
+            if self.early_stopping:
+                self.validation_scores_ = []
+                self.best_validation_score_ = -np.inf
+                self.best_loss_ = None
+            else:
+                self.best_loss_ = np.inf
+                self.validation_scores_ = None
+                self.best_validation_score_ = None        
     
     def dual_fit(self,X,y,I, bias = None, par_lr = 1.0, recurrent_hidden = 3):
         self.recurrent_hidden = recurrent_hidden
@@ -106,11 +151,21 @@ class BiasedRecurrentClassifier(MLPClassifier):
         self._label_binarizer.fit(y)
         self.classes_ = self._label_binarizer.classes_
         y = self._label_binarizer.transform(y).astype(bool)
+        
+        if len(y.shape) < 3:
+            self.n_outputs_ = 1
+        else:
+            self.n_outputs_ = y.shape[2]         
+        
         mask1 = list(range(recurrent_hidden - 1))
+        self.max_iter = 10
+        print ("Fit X->I:")
         self._fit(X, I, incremental=False, fit_mask = mask1, predict_mask = mask1)
         ws_tmp = self.warm_start
         self.warm_start = True
-        res = self._fit(X, y, incremental=True, fit_mask = list(range(recurrent_hidden - 1, self.n_layers_ - 1)), predict_mask = mask1)
+        self.max_iter = 20
+        print("Fit I->W->Y: ")
+        res = self._fit(X, y, incremental=False, fit_mask = list(range(recurrent_hidden - 1, self.n_layers_ - 1)))
         self.warm_start = ws_tmp
         self._prune(mask = mask1)
         self.bias = None
@@ -188,6 +243,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
         self.classes_ = self._label_binarizer.classes_
         self.recurrent_hidden = recurrent_hidden
         y = self._label_binarizer.transform(y).astype(bool)
+        self.n_outputs_ = None
         res = self._fit(X, y, incremental=False)
         self.bias = None
         return res   
@@ -369,10 +425,11 @@ class BiasedRecurrentClassifier(MLPClassifier):
 
         n_features = X.shape[2]
 
-        if len(y.shape) < 3:
-            self.n_outputs_ = 1
-        else:
-            self.n_outputs_ = y.shape[2]    
+        if self.n_outputs_ is None:
+            if len(y.shape) < 3:
+                self.n_outputs_ = 1
+            else:
+                self.n_outputs_ = y.shape[2]    
 
         self.layer_units = [n_features + hidden_layer_sizes[len(hidden_layer_sizes) - 1]] + hidden_layer_sizes + [self.n_outputs_]
 
@@ -674,11 +731,19 @@ class BiasedRecurrentClassifier(MLPClassifier):
         # Forward propagate
         activations = self._forward_pass(activations, bias, par_lr = self.par_lr)#, mask = predict_mask)
 
+        if predict_mask is not None:
+            layer_range = sorted(list(predict_mask),reverse=True)
+        else:    
+            layer_range = list(range(self.n_layers_ - 2, -1, -1))
+
+        # Backward propagate
+        last = layer_range[0]
+
         # Get loss
         loss_func_name = self.loss
         if loss_func_name == "log_loss" and self.out_activation_ == "logistic":
             loss_func_name = "binary_log_loss"
-        loss = LOSS_FUNCTIONS[loss_func_name](y.flatten(), activations[-1].flatten())
+        loss = LOSS_FUNCTIONS[loss_func_name](y.flatten(), activations[last + 1].flatten())
         # Add L2 regularization term to loss
         values = 0
         for s in self.coefs_:
@@ -691,14 +756,6 @@ class BiasedRecurrentClassifier(MLPClassifier):
         # sigmoid and binary cross entropy, softmax and categorical cross
         # entropy, and identity with squared loss
         
-        if predict_mask is not None:
-            layer_range = sorted(list(predict_mask),reverse=True)
-        else:    
-            layer_range = list(range(self.n_layers_ - 2, -1, -1))
-
-        # Backward propagate
-        last = layer_range[0]
-            
         for t in range(X.shape[1] - 1, -1, -1):
             if last == self.n_layers_ - 2:
                 eps = np.finfo(activations[last][:,t].dtype).eps
@@ -722,7 +779,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
                 #if i == self.n_layers_ -  2 and t < X.shape[1] - 1:
                 if i == self.recurrent_hidden and t < X.shape[1] - 1:
                     deltas[prev_i][t] = safe_sparse_dot(deltas[i][t], self.coefs_[i].T)
-                    deltas[prev_i][t] += safe_sparse_dot(deltas[0][t + 1][:,:deltas[i][t].shape[1]],self.coefs_[0][:deltas[i][t].shape[1],:].T)
+                    deltas[prev_i][t] += safe_sparse_dot(deltas[0][t + 1],self.coefs_[0][:deltas[i][t].shape[1],:].T)
                 else:    
                     deltas[prev_i][t] = safe_sparse_dot(deltas[i][t], self.coefs_[i].T)
                 inplace_derivative(activations[i][:,t], deltas[prev_i][t])        
