@@ -251,7 +251,7 @@ def ce_score2(logits, labels):
 # print (lstm_data)
 
 print("Boosted cascade")
-model = CascadeSequentialClassifier(C=100.0, n_layers=1, verbose=2, n_estimators = 4, max_depth=2,max_features=1.0)#, n_iter_no_change = 1, validation_fraction = 0.1)
+model = CascadeSequentialClassifier(C=100.0, n_layers=3, verbose=2, n_estimators = 4, max_depth=2,max_features=1.0)#, n_iter_no_change = 1, validation_fraction = 0.1)
 #model = BiasedRecurrentClassifier(alpha=1./10000.,
 #                                  hidden_layer_sizes=(20,20,20),
 #                                               activation=["logistic","softmax","identity","identity"],
@@ -263,7 +263,7 @@ model = CascadeSequentialClassifier(C=100.0, n_layers=1, verbose=2, n_estimators
 
 model.fit(x_train, Y_train)#,bias = np.zeros((x_train.shape[0],x_train.shape[1],20)), recurrent_hidden = 3)#, monitor = monitor)
  
-Y_v,_ = model.predict_proba(x_validate)
+Y_v = model.predict_proba(x_validate)
 # 
 # 
 
@@ -276,7 +276,7 @@ print(
 print("Cross-entropy diff: ", ce_score2(Y_v, Y_validate) - np.log(low_perp))
 
 
-Y_v,_ = model.predict_proba(x_train)
+Y_v = model.predict_proba(x_train)
 # 
 # 
 

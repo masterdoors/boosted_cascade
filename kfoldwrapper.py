@@ -99,9 +99,9 @@ class KFoldWrapper(object):
 
             
     def predict(self, X,history):
-        n_samples, _ = X.shape
-        out = np.zeros((n_samples, ))  # pre-allocate results
-        hidden = np.zeros((n_samples, self.hidden_size))
+        n_samples = X.shape[0]
+        out = np.zeros((n_samples,  X.shape[1]))  # pre-allocate results
+        hidden = np.zeros((n_samples,  X.shape[1], self.hidden_size))   
         for estimator in self.estimators_:
             out_, hidden_ = estimator.predict_proba(X,bias=history,learning_rate = self.learning_rate)  # classification
             out += out_

@@ -68,7 +68,9 @@ class MixedModel:
             
             tmp = self.network
             self.network = mm
-            y_pred,_,I = self.predict_proba(X_, bias, returnI = True)
+            y_pred,_,I_ = self.predict_proba(X_, bias, returnI = True)
+            print("I diff: ", np.bitwise_xor(I.flatten().astype(int),I_.flatten().astype(int)).sum(), " of ", I.flatten().shape[0])
+            I = I_
             self.network = tmp
             encoded_classes = np.asarray(y_pred.flatten() >= 0, dtype=int)
             

@@ -270,7 +270,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         network = BiasedRecurrentClassifier(alpha=1./10000.,
                                   hidden_layer_sizes=(20,20,20),
                                                activation=["tanh","logistic","identity","identity"],
-                                               verbose=True,
+                                               verbose=False,
                                                 max_iter=3500,
                                                 learning_rate_init=0.01, tol = 0.000001,
                                                  n_iter_no_change = 3500, batch_size=6, epsilon=1e-7, early_stopping=False)    
@@ -491,12 +491,12 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                     
                         
             for _,estimator in enumerate(self.estimators_[i,k]):                            
-                r, h = estimator.predict(X_a,history_copy[:,:,:,k].reshape(-1,self.hidden_size))
+                r, h = estimator.predict(X_a,history_copy[:,:,:,k])
                 history[:,:,:,k] += h.reshape(history[:,:,:,k].shape)        
                 raw_predictions[:,:,k] += r.reshape(raw_predictions.shape[0],raw_predictions.shape[1])  
         #history[:,:,:,:] = np.clip(history,-2.99,2.99)
         #raw_predictions[:,:,:] = np.clip(raw_predictions,-2.99,2.99)  
-        print("hidden_sum test:", i, history[0,0,:,0][:4])      
+        #print("hidden_sum test:", i, history[0,0,:,0][:4])      
         print("Dist test:", np.linalg.norm(history_copy.flatten()-history.flatten()))     
         
                 
