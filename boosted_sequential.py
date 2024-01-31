@@ -319,7 +319,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                 for k in range(K):
                     wkh_ = []
                     for e in self.estimators_[i-1,k]:
-                        wkh_ += [e.lr[j].coefs_[1].flatten() for j in range(len(e.estimators_))]
+                        wkh_ += [e.estimators_[j].network.coefs_[1].flatten() for j in range(len(e.estimators_))]
                     wkh_ = np.vstack(wkh_)
                     #print("wkh:",wkh_.min(),wkh_.max())
                     wkh_ = wkh_.mean(axis=0)
@@ -356,20 +356,28 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
     
             self.estimators_[i, k] = []
                    
+            X_a = np.zeros((X.shape[0],X.shape[1], X.shape[2] + self.hidden_size))
             X_aug = np.zeros((X.shape[0],X.shape[1], X.shape[2] + 2 * self.hidden_size))
              
             for t in range(X.shape[1]):
                 aug_part = [binned_history[:,t,:,k].reshape(-1,self.hidden_size)]
-                if t > 0:
-                    aug_part += [binned_history[:,t - 1,:,k].reshape(-1,self.hidden_size)] 
-                else:
-                    aug_part += [np.zeros(binned_history[:,t,:,k].shape).reshape(-1,self.hidden_size)]
-                                           
+                
                 if isinstance(X,np.ndarray):
-                    X_aug[:,t] = np.hstack([X[:,t]] + aug_part)
+                    X_a[:,t] = np.hstack(aug_part + [X[:,t]])
                 else:
                     aug = np.hstack(aug_part)
-                    X_aug[:,t] = hstack([X[:,t], csr_matrix(aug)])
+                    X_a[:,t] = hstack([csr_matrix(aug), X[:,t]])                
+                
+                if t > 0:
+                    aug_part = [history_sum[:,t - 1,:,k].reshape(-1,self.hidden_size)] + aug_part 
+                else:
+                    aug_part = [np.zeros(binned_history[:,t,:,k].shape).reshape(-1,self.hidden_size)] + aug_part
+                                           
+                if isinstance(X,np.ndarray):
+                    X_aug[:,t] = np.hstack(aug_part + [X[:,t]])
+                else:
+                    aug = np.hstack(aug_part)
+                    X_aug[:,t] = hstack([csr_matrix(aug), X[:,t]])
                     
             for eid  in range(self.n_estimators):
                 if eid %2 == 0:
@@ -400,7 +408,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                     )
                 self.estimators_[i, k].append(kfold_estimator)                           
                 
-                raw_predictions_, history_sum_ = kfold_estimator.fit(X.astype(float), X_aug.astype(float),
+                raw_predictions_, history_sum_ = kfold_estimator.fit(X_a.astype(float), X_aug.astype(float),
                                                                       residual[:,:, k], y,
                                                                        history_sum_copy[:,:,:,k],
                                                                        sample_weight)
@@ -460,22 +468,30 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         else:
             K = self._loss.n_classes    
         for k in range(K):
-            X_aug = np.zeros((X.shape[0],X.shape[1], X.shape[2] + 2 * self.hidden_size))
+            X_a = np.zeros((X.shape[0],X.shape[1], X.shape[2] + self.hidden_size))
             for t in range(X.shape[1]):
                 aug_part = [binned_history[:,t,:,k].reshape(-1,self.hidden_size)]
-                if t > 0:
-                    aug_part += [binned_history[:,t - 1,:,k].reshape(-1,self.hidden_size)] 
-                else:
-                    aug_part += [np.zeros(binned_history[:,t,:,k].shape).reshape(-1,self.hidden_size)]
-                                           
+                    
                 if isinstance(X,np.ndarray):
-                    X_aug[:,t] = np.hstack([X[:,t]] + aug_part)
+                    X_a[:,t] = np.hstack(aug_part + [X[:,t]])
                 else:
                     aug = np.hstack(aug_part)
-                    X_aug[:,t] = hstack([X[:,t], csr_matrix(aug)])
+                    X_a[:,t] = hstack([csr_matrix(aug), X[:,t]])                
+                
+#                 if t > 0:
+#                     aug_part = [binned_history[:,t - 1,:,k].reshape(-1,self.hidden_size)] + aug_part 
+#                 else:
+#                     aug_part = [np.zeros(binned_history[:,t,:,k].shape).reshape(-1,self.hidden_size)] + aug_part
+#                                            
+#                 if isinstance(X,np.ndarray):
+#                     X_aug[:,t] = np.hstack(aug_part + [X[:,t]])
+#                 else:
+#                     aug = np.hstack(aug_part)
+#                     X_aug[:,t] = hstack([csr_matrix(aug), X[:,t]])                    
+                    
                         
             for _,estimator in enumerate(self.estimators_[i,k]):                            
-                r, h = estimator.predict(X_aug.reshape(-1,X_aug.shape[2]),history_copy[:,:,:,k].reshape(-1,self.hidden_size))
+                r, h = estimator.predict(X_a,history_copy[:,:,:,k].reshape(-1,self.hidden_size))
                 history[:,:,:,k] += h.reshape(history[:,:,:,k].shape)        
                 raw_predictions[:,:,k] += r.reshape(raw_predictions.shape[0],raw_predictions.shape[1])  
         #history[:,:,:,:] = np.clip(history,-2.99,2.99)

@@ -78,13 +78,13 @@ class KFoldWrapper(object):
         self.lr = []
         self.estimators_ = []
         n_samples = X.shape[0]
-        out = np.zeros((n_samples, ))  # pre-allocate results
-        hidden = np.zeros((n_samples, self.hidden_size))        
+        out = np.zeros((n_samples,  X.shape[1]))  # pre-allocate results
+        hidden = np.zeros((n_samples,  X.shape[1], self.hidden_size))        
         #print("y:",y.min(), y.max())
         kf = KFold(n_splits=self.n_splits, random_state=None, shuffle=True)
         for train_index, test_index in kf.split(X):
             bias = history_k
-            estimator = MixedModel(self.dummy_estimator_f, self.dummy_estimator_n, max_iter = 10,learning_rate = self.learning_rate)
+            estimator = MixedModel(self.dummy_estimator_f, self.dummy_estimator_n, max_iter = 3,learning_rate = self.learning_rate)
             if sample_weight is not None:
                 estimator.fit(X[train_index],y[train_index],X_[train_index],y_[train_index],bias[train_index],sample_weight[train_index])
             else:

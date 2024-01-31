@@ -23,6 +23,7 @@ from sklearn.utils import (
     check_random_state)
 
 import scipy
+import copy
 from sklearn.utils.optimize import _check_optimize_result
 from sklearn.utils.extmath import safe_sparse_dot
 import numpy as np
@@ -101,6 +102,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
         self.layer_units = [c for i,c in enumerate(self.layer_units) if i not in mask]
         
     def _initialize(self, y, layer_units, dtype):
+        print("RNN Init has been called...")
         # set all attributes, allocate weights etc. for first call
         # Initialize parameters
         self.n_iter_ = 0
@@ -144,6 +146,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
                 self.best_validation_score_ = None        
     
     def dual_fit(self,X,y,I, bias = None, par_lr = 1.0, recurrent_hidden = 3):
+        self.mixed_mode = False
         self.recurrent_hidden = recurrent_hidden
         self.bias = bias
         self.par_lr = par_lr
@@ -158,18 +161,22 @@ class BiasedRecurrentClassifier(MLPClassifier):
             self.n_outputs_ = y.shape[2]         
         
         mask1 = list(range(recurrent_hidden - 1))
-        self.max_iter = 10
+        self.max_iter = 5
         print ("Fit X->I:")
         self._fit(X, I, incremental=False, fit_mask = mask1, predict_mask = mask1)
-        ws_tmp = self.warm_start
+        #ws_tmp = self.warm_start
         self.warm_start = True
-        self.max_iter = 20
+        self.max_iter = 5
         print("Fit I->W->Y: ")
         res = self._fit(X, y, incremental=False, fit_mask = list(range(recurrent_hidden - 1, self.n_layers_ - 1)))
-        self.warm_start = ws_tmp
-        self._prune(mask = mask1)
+        #self.warm_start = ws_tmp
         self.bias = None
-        return res 
+        
+        mixed_copy = copy.deepcopy(self)
+        mixed_copy._prune(mask = mask1)
+        mixed_copy.mixed_mode = True
+
+        return mixed_copy 
 
     def _forward_pass(self, activations, bias = None, par_lr = 1.0):
         """Perform a forward pass on the network by computing the values
@@ -190,7 +197,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
             for n,i in enumerate(layer_range_all[:-1]):
                 next_i = layer_range_all[n + 1]
                 hidden_activation = ACTIVATIONS[self.activation[i]]
-                if i == 0:
+                if i == 0 and not self.mixed_mode:
                     if t > 0:
                         #activations[i + 1][:,t] = safe_sparse_dot(np.hstack([activations[self.n_layers_ -  2][:,t - 1], activations[i][:,t]]), self.coefs_[i])
                         activations[next_i][:,t] = safe_sparse_dot(np.hstack([activations[i + self.recurrent_hidden][:,t - 1], activations[i][:,t]]), self.coefs_[i])
@@ -244,6 +251,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
         self.recurrent_hidden = recurrent_hidden
         y = self._label_binarizer.transform(y).astype(bool)
         self.n_outputs_ = None
+        self.mixed_mode = False
         res = self._fit(X, y, incremental=False)
         self.bias = None
         return res   
@@ -304,7 +312,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
         y_pred = activations[self.n_layers_ - 1]
 
         if self.n_outputs_ == 1:
-            y_pred = y_pred.ravel()
+            y_pred = y_pred.reshape((y_pred.shape[0],y_pred.shape[1]))
         if non_activations:
             return y_pred, activations[1], non_activations[1]
         else:     

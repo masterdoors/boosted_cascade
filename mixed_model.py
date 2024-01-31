@@ -6,10 +6,10 @@ Created on Jan 29, 2024
 import copy
 import numpy as np
 from sklearn.ensemble._forest import _generate_unsampled_indices, _get_n_samples_bootstrap, _generate_sample_indices
-
+from sklearn.metrics import accuracy_score
 
 class MixedModel:
-    def __init__(self, forest_estimator, network_estimator, max_iter = 10,learning_rate = 1.):
+    def __init__(self, forest_estimator, network_estimator, max_iter = 5,learning_rate = 1.):
         self.learning_rate = learning_rate
         self.forest = copy.deepcopy(forest_estimator)
         self.network_estimator = network_estimator
@@ -62,17 +62,21 @@ class MixedModel:
         for i in range(self.max_iter):
             print ("Outer loop iter: ", i)
             self.network.hidden_layer_sizes = (I.shape[1],) + (I.shape[1],) + (self.network.hidden_layer_sizes[2],)
-            self.network.dual_fit(X_, y_, I.reshape((y_.shape[0],y_.shape[1],-1)),
+            mm = self.network.dual_fit(X_, y_, I.reshape((y_.shape[0],y_.shape[1],-1)),
                                    bias = bias, par_lr = self.learning_rate,
                                    recurrent_hidden = 3)
             
+            tmp = self.network
+            self.network = mm
             y_pred,_,I = self.predict_proba(X_, bias, returnI = True)
+            self.network = tmp
+            encoded_classes = np.asarray(y_pred.flatten() >= 0, dtype=int)
             
-            
-            del self.network
-            self.network = copy.deepcopy(self.network_estimator)
-    
-    def predict_proba(self, X, bias, returnI = False ):
+            print("Mixed score: ", accuracy_score(encoded_classes, y_.flatten()))
+            I = I.reshape((-1,I.shape[2])) 
+        self.network = mm
+        
+    def predict_proba(self, X, bias, returnI = False, learning_rate = 1.0):
         res = np.zeros((X.shape[0],X.shape[1]))
         hidden = np.zeros((X.shape[0],X.shape[1],self.network.coefs_[0].shape[1]))
         I_list = []
@@ -83,10 +87,12 @@ class MixedModel:
                 X_aug = np.hstack([hidden[:, 0],X[:,t]])    
                 
             I = self.getIndicators(self.forest, X_aug, False, False)
-            res[:,t], hidden[:,t] = self.network.predict_proba(I,  bias = bias, par_lr = self.learning_rate)
             I_list.append(I)
+            I = np.swapaxes(np.asarray(I_list),0,1)
+            res[:,:t + 1], hidden[:,:t + 1] = self.network.predict_proba(I,  bias = bias, par_lr = learning_rate)
+
         if returnI:
-            return res, hidden, np.swapaxes(np.asarray(I_list),0,1)
+            return res, hidden, I
         else:    
             return res, hidden    
         
