@@ -70,15 +70,6 @@ class MixedModel:
             tmp = self.network
             self.network = mm
             y_pred,_,I_,X = self.predict_proba(X_, bias, returnI = True)
-            if sample_weight is not None:
-                self.forest.fit(
-                                X.reshape(-1,X.shape[2]), y.flatten(), sample_weight.flatten()
-                                )
-            else:
-                self.forest.fit(
-                                X.reshape(-1,X.shape[2]), y.flatten() 
-                                )            
-            y_pred,_,I_,X = self.predict_proba(X_, bias, returnI = True)
             
             #print("I diff: ", np.bitwise_xor(I.flatten().astype(int),I_.flatten().astype(int)).sum(), " of ", I.flatten().shape[0])
             I = I_
