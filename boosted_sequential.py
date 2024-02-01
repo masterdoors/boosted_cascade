@@ -270,7 +270,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         network = BiasedRecurrentClassifier(alpha=1./10000.,
                                   hidden_layer_sizes=(20,20,20),
                                                activation=["tanh","logistic","identity","identity"],
-                                               verbose=False,
+                                               verbose=True,
                                                 max_iter=3500,
                                                 learning_rate_init=0.01, tol = 0.000001,
                                                  n_iter_no_change = 3500, batch_size=6, epsilon=1e-7, early_stopping=False)    
@@ -369,7 +369,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                     X_a[:,t] = hstack([csr_matrix(aug), X[:,t]])                
                 
                 if t > 0:
-                    aug_part = [history_sum[:,t - 1,:,k].reshape(-1,self.hidden_size)] + aug_part 
+                    aug_part = [history_sum_copy[:,t - 1,:,k].reshape(-1,self.hidden_size)] + aug_part 
                 else:
                     aug_part = [np.zeros(binned_history[:,t,:,k].shape).reshape(-1,self.hidden_size)] + aug_part
                                            

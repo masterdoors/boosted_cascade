@@ -57,7 +57,8 @@ class MixedModel:
                             X.reshape(-1,X.shape[2]), y.flatten() 
                             )
                 
-        
+        #print("Forest train X: ",X[1,2,:20])
+        #print("Importances: ", self.forest.feature_importances_)
         I = self.getIndicators(self.forest, X.reshape(-1,X.shape[2]), False, False)        
         for i in range(self.max_iter):
             print ("Outer loop iter: ", i)
@@ -68,8 +69,18 @@ class MixedModel:
             
             tmp = self.network
             self.network = mm
-            y_pred,_,I_ = self.predict_proba(X_, bias, returnI = True)
-            print("I diff: ", np.bitwise_xor(I.flatten().astype(int),I_.flatten().astype(int)).sum(), " of ", I.flatten().shape[0])
+            y_pred,_,I_,X = self.predict_proba(X_, bias, returnI = True)
+            if sample_weight is not None:
+                self.forest.fit(
+                                X.reshape(-1,X.shape[2]), y.flatten(), sample_weight.flatten()
+                                )
+            else:
+                self.forest.fit(
+                                X.reshape(-1,X.shape[2]), y.flatten() 
+                                )            
+            y_pred,_,I_,X = self.predict_proba(X_, bias, returnI = True)
+            
+            #print("I diff: ", np.bitwise_xor(I.flatten().astype(int),I_.flatten().astype(int)).sum(), " of ", I.flatten().shape[0])
             I = I_
             self.network = tmp
             encoded_classes = np.asarray(y_pred.flatten() >= 0, dtype=int)
@@ -82,19 +93,21 @@ class MixedModel:
         res = np.zeros((X.shape[0],X.shape[1]))
         hidden = np.zeros((X.shape[0],X.shape[1],self.network.coefs_[0].shape[1]))
         I_list = []
+        X_augs = []
         for t in range(X.shape[1]):
             if t > 0:
                 X_aug = np.hstack([hidden[:, t - 1],X[:,t]])
             else:
                 X_aug = np.hstack([hidden[:, 0],X[:,t]])    
-                
+            
+            X_augs.append(X_aug)
             I = self.getIndicators(self.forest, X_aug, False, False)
             I_list.append(I)
             I = np.swapaxes(np.asarray(I_list),0,1)
             res[:,:t + 1], hidden[:,:t + 1] = self.network.predict_proba(I,  bias = bias, par_lr = learning_rate)
 
         if returnI:
-            return res, hidden, I
+            return res, hidden, I, np.swapaxes(np.asarray(X_augs),0,1)
         else:    
             return res, hidden    
         
