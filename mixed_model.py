@@ -61,8 +61,8 @@ class MixedModel:
         #print("Importances: ", self.forest.feature_importances_)
         I = self.getIndicators(self.forest, X.reshape(-1,X.shape[2]), False, False)     
         
-        np.save("X.npy", X)
-        np.save("I.npy", I)   
+        #np.save("X.npy", X)
+        #np.save("I.npy", I)   
         
         for i in range(self.max_iter):
             print ("Outer loop iter: ", i)

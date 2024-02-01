@@ -58,6 +58,13 @@ DERIVATIVES = {
 
 _STOCHASTIC_SOLVERS = ["sgd", "adam"]
 
+def obinary_log_loss(y_true, y_prob):
+
+    return (
+        -(xlogy(y_true, y_prob).sum() + xlogy(1 - y_true, 1 - y_prob).sum())
+        / y_prob.shape[0]
+    )
+
 def binary_log_loss(y_true, y_prob):
     """Compute binary logistic loss for classification.
 
@@ -89,6 +96,7 @@ def binary_log_loss(y_true, y_prob):
 
 LOSS_FUNCTIONS = {
     "binary_log_loss": binary_log_loss,
+    "original_binary_log_loss": obinary_log_loss,    
 }
 
 class BiasedRecurrentClassifier(MLPClassifier):
@@ -111,16 +119,6 @@ class BiasedRecurrentClassifier(MLPClassifier):
 
         # Compute the number of layers
         self.n_layers_ = len(layer_units)
-
-        # Output for regression
-        if not is_classifier(self):
-            self.out_activation_ = "identity"
-        # Output for multi class
-        elif self._label_binarizer.y_type_ == "multiclass":
-            self.out_activation_ = "softmax"
-        # Output for binary class and multi-label
-        else:
-            self.out_activation_ = "logistic"
 
         # Initialize coefficient and intercept layers
         self.coefs_ = []
@@ -150,10 +148,6 @@ class BiasedRecurrentClassifier(MLPClassifier):
         self.recurrent_hidden = recurrent_hidden
         self.bias = bias
         self.par_lr = par_lr
-        self._label_binarizer = LabelBinarizer()
-        self._label_binarizer.fit(y)
-        self.classes_ = self._label_binarizer.classes_
-        y = self._label_binarizer.transform(y).astype(bool)
         
         if len(y.shape) < 3:
             self.n_outputs_ = 1
@@ -161,12 +155,12 @@ class BiasedRecurrentClassifier(MLPClassifier):
             self.n_outputs_ = y.shape[2]         
         
         mask1 = list(range(recurrent_hidden - 1))
-        self.max_iter = 5
+        self.max_iter = 2
         print ("Fit X->I:")
         self._fit(X, I, incremental=False, fit_mask = mask1, predict_mask = mask1)
         #ws_tmp = self.warm_start
         self.warm_start = True
-        self.max_iter = 5
+        self.max_iter = 20
         print("Fit I->W->Y: ")
         res = self._fit(X, y, incremental=False, fit_mask = list(range(recurrent_hidden - 1, self.n_layers_ - 1)))
         #self.warm_start = ws_tmp
@@ -245,11 +239,9 @@ class BiasedRecurrentClassifier(MLPClassifier):
         """
         self.bias = bias
         self.par_lr = par_lr
-        self._label_binarizer = LabelBinarizer()
-        self._label_binarizer.fit(y)
-        self.classes_ = self._label_binarizer.classes_
+
         self.recurrent_hidden = recurrent_hidden
-        y = self._label_binarizer.transform(y).astype(bool)
+
         self.n_outputs_ = None
         self.mixed_mode = False
         res = self._fit(X, y, incremental=False)
@@ -552,8 +544,6 @@ class BiasedRecurrentClassifier(MLPClassifier):
                     test_size=self.validation_fraction,
                     stratify=stratify,
                 )                    
-            if is_classifier(self):
-                y_val = self._label_binarizer.inverse_transform(y_val)
         else:
             X_val = None
             y_val = None
@@ -749,9 +739,15 @@ class BiasedRecurrentClassifier(MLPClassifier):
 
         # Get loss
         loss_func_name = self.loss
-        if loss_func_name == "log_loss" and self.out_activation_ == "logistic":
-            loss_func_name = "binary_log_loss"
+
+        if last != self.n_layers_ - 2:
+            loss_func_name = "original_binary_log_loss"
+        else:
+            loss_func_name = "binary_log_loss"    
+        
         loss = LOSS_FUNCTIONS[loss_func_name](y.flatten(), activations[last + 1].flatten())
+        
+
         # Add L2 regularization term to loss
         values = 0
         for s in self.coefs_:
