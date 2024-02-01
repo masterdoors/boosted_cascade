@@ -59,7 +59,11 @@ class MixedModel:
                 
         #print("Forest train X: ",X[1,2,:20])
         #print("Importances: ", self.forest.feature_importances_)
-        I = self.getIndicators(self.forest, X.reshape(-1,X.shape[2]), False, False)        
+        I = self.getIndicators(self.forest, X.reshape(-1,X.shape[2]), False, False)     
+        
+        np.save("X.npy", X)
+        np.save("I.npy", I)   
+        
         for i in range(self.max_iter):
             print ("Outer loop iter: ", i)
             self.network.hidden_layer_sizes = (I.shape[1],) + (I.shape[1],) + (self.network.hidden_layer_sizes[2],)
