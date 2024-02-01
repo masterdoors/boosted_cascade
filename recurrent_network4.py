@@ -112,16 +112,6 @@ class BiasedRecurrentClassifier(MLPClassifier):
         # Compute the number of layers
         self.n_layers_ = len(layer_units)
 
-        # Output for regression
-        if not is_classifier(self):
-            self.out_activation_ = "identity"
-        # Output for multi class
-        elif self._label_binarizer.y_type_ == "multiclass":
-            self.out_activation_ = "softmax"
-        # Output for binary class and multi-label
-        else:
-            self.out_activation_ = "logistic"
-
         # Initialize coefficient and intercept layers
         self.coefs_ = []
         self.intercepts_ = []
@@ -204,11 +194,8 @@ class BiasedRecurrentClassifier(MLPClassifier):
         """
         self.bias = bias
         self.par_lr = par_lr
-        self._label_binarizer = LabelBinarizer()
-        self._label_binarizer.fit(y)
-        self.classes_ = self._label_binarizer.classes_
+
         self.recurrent_hidden = recurrent_hidden
-        y = self._label_binarizer.transform(y).astype(bool)
         self.n_outputs_ = None
         self.mixed_mode = False
         res = self._fit(X, y, incremental=False)
@@ -398,7 +385,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
             else:
                 self.n_outputs_ = y.shape[2]    
 
-        self.layer_units = [n_features + hidden_layer_sizes[len(hidden_layer_sizes) - 1]] + hidden_layer_sizes + [self.n_outputs_]
+        self.layer_units = [n_features] + hidden_layer_sizes + [self.n_outputs_]
 
         # check random state
         self._random_state = check_random_state(self.random_state)
@@ -512,7 +499,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
                     stratify=stratify,
                 )                    
             if is_classifier(self):
-                y_val = self._label_binarizer.inverse_transform(y_val)
+                y_val =y_val
         else:
             X_val = None
             y_val = None
@@ -701,8 +688,8 @@ class BiasedRecurrentClassifier(MLPClassifier):
 
         # Get loss
         loss_func_name = self.loss
-        if loss_func_name == "log_loss" and self.out_activation_ == "logistic":
-            loss_func_name = "binary_log_loss"
+
+        loss_func_name = "binary_log_loss"
         loss = LOSS_FUNCTIONS[loss_func_name](y.flatten(), activations[last + 1].flatten())
         # Add L2 regularization term to loss
         values = 0
