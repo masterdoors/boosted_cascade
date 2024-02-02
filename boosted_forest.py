@@ -127,7 +127,7 @@ class BaseBoostedCascade(BaseGradientBoosting):
         tol=1e-4,
         ccp_alpha=0.0,
         C=1.0,
-        n_splits=5,
+        n_splits=3,
         n_bins=255,
         bin_subsample=200000,
         bin_type="percentile"):

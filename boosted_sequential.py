@@ -88,15 +88,15 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         
         matplotlib.use('Agg')
 
-        binner_ = Binner(
-            n_bins=self.n_bins,
-            bin_subsample=self.bin_subsample,
-            bin_type=self.bin_type,
-            random_state=self.random_state,
-        )  
-        
-        self.binners.append(binner_)      
-        X_ = self._bin_data(binner_, X, is_training_data=True)
+#         binner_ = Binner(
+#             n_bins=self.n_bins,
+#             bin_subsample=self.bin_subsample,
+#             bin_type=self.bin_type,
+#             random_state=self.random_state,
+#         )  
+#         
+#         self.binners.append(binner_)      
+        X_ = X#self._bin_data(binner_, X, is_training_data=True)
         
         n_samples = X.shape[0]
         do_oob = self.subsample < 1.0
@@ -272,24 +272,24 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                                                activation=["tanh","logistic","identity","identity"],
                                                verbose=True,
                                                 max_iter=3500,
-                                                learning_rate_init=0.01, tol = 0.000001,
-                                                 n_iter_no_change = 3500, batch_size=6, epsilon=1e-7, early_stopping=False)    
+                                                learning_rate_init=0.01, tol = 0.0001,
+                                                 n_iter_no_change = 700, batch_size=6, epsilon=1e-7, early_stopping=False)    
 
         # Need to pass a copy of raw_predictions to negative_gradient()
         # because raw_predictions is partially updated at the end of the loop
         # in update_terminal_regions(), and gradients need to be evaluated at
         # iteration i - 1.
 
-        binner_ = Binner(
-            n_bins=self.n_bins,
-            bin_subsample=self.bin_subsample,
-            bin_type=self.bin_type,
-            random_state=self.random_state,
-        )  
+#         binner_ = Binner(
+#             n_bins=self.n_bins,
+#             bin_subsample=self.bin_subsample,
+#             bin_type=self.bin_type,
+#             random_state=self.random_state,
+#         )  
+#         
+#         self.binners.append(binner_)      
         
-        self.binners.append(binner_)      
-        
-        binned_history = self._bin_data(binner_, history_sum.reshape(X.shape[0],-1), is_training_data=True).reshape(history_sum.shape)       
+        #binned_history = history_sum#self._bin_data(binner_, history_sum.reshape(X.shape[0],-1), is_training_data=True).reshape(history_sum.shape)       
         
         if loss.n_classes == 2:
             residual = np.zeros((X.shape[0],X.shape[1], 1))
@@ -343,6 +343,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
 
         #print("R range:", residual.min(), residual.max())            
         history_sum_copy = history_sum.copy()
+        binned_history = history_sum_copy
         raw_predictions.fill(0.)
         history_sum.fill(0.)
         
@@ -441,7 +442,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
     
     def _raw_predict_init(self, X):
         """Check input and compute raw predictions of the init estimator."""
-        X = self._bin_data(self.binners[0], X, False)
+        X = X #self._bin_data(self.binners[0], X, False)
         self._check_initialized()
 
         #X = self.estimators_[0, 0][0].estimator_[0]._validate_X_predict(X_aug)
@@ -458,10 +459,11 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
     
      
     def predict_stage(self, i, X, raw_predictions, history):
-        binned_history = self._bin_data(self.binners[i + 1], history.reshape(raw_predictions.shape[0], -1),
-                                         is_training_data = False).reshape(history.shape)
+        #binned_history = self._bin_data(self.binners[i + 1], history.reshape(raw_predictions.shape[0], -1),
+        #        is_training_data = False).reshape(history.shape)
         raw_predictions.fill(0.)                                 
         history_copy = history.copy()
+        binned_history = history_copy
         history.fill(0.) 
         if self._loss.n_classes == 2:
             K = 1
@@ -633,7 +635,7 @@ class CascadeSequentialClassifier(ClassifierMixin, BaseSequentialBoostingDummy):
     
     def predict_stages(self, X, raw_predictions):
         history = np.repeat((1. / self.hidden_size)*raw_predictions,self.hidden_size, axis=2).reshape(raw_predictions.shape[:2] + (self.hidden_size,) + (raw_predictions.shape[2],))
-        X = self._bin_data(self.binners[0], X, False)        
+        X = X #self._bin_data(self.binners[0], X, False)        
         for i in range(self.n_layers):
             self.predict_stage(i, X, raw_predictions, history)    
             #print("test stage:", i,raw_predictions.shape, raw_predictions.max(), raw_predictions.mean(),raw_predictions.min())
