@@ -251,19 +251,19 @@ def ce_score2(logits, labels):
 # print (lstm_data)
 
 print("Boosted cascade")
-#model = CascadeSequentialClassifier(C=100.0, n_layers=10, verbose=2, n_estimators = 2, max_depth=2,max_features=1.0)#, n_iter_no_change = 1, validation_fraction = 0.1)
-model = BiasedRecurrentClassifier(alpha=1./10000.,
-                                  hidden_layer_sizes=(20,20,20),
-                                               activation=["tanh","logistic","identity","identity"],
-                                               verbose=True,
-                                                max_iter=3500,
-                                                learning_rate_init=0.001, tol = 0.000001,
-                                                 n_iter_no_change = 3500, batch_size=6, epsilon=1e-7, early_stopping=False)
+model = CascadeSequentialClassifier(C=100.0, n_layers=10, verbose=2, n_estimators = 2, max_depth=2,max_features=1.0)#, n_iter_no_change = 1, validation_fraction = 0.1)
+# model = BiasedRecurrentClassifier(alpha=1./10000.,
+#                                   hidden_layer_sizes=(20,20,20),
+#                                                activation=["tanh","logistic","identity","identity"],
+#                                                verbose=True,
+#                                                 max_iter=3500,
+#                                                 learning_rate_init=0.0001, tol = 0.000001,
+#                                                  n_iter_no_change = 3500, batch_size=6, epsilon=1e-7, early_stopping=False)
 
 
-model.fit(x_train, Y_train ,bias = np.zeros((x_train.shape[0],x_train.shape[1],20)), recurrent_hidden = 3)#, monitor = monitor)
+model.fit(x_train, Y_train )#,bias = np.zeros((x_train.shape[0],x_train.shape[1],20)), recurrent_hidden = 3)#, monitor = monitor)
  
-#model.dual_fit(x_train,Y_train,I = [], bias = np.zeros((x_train.shape[0],x_train.shape[1],20)))
+model.dual_fit(x_train,Y_train,I = [], bias = np.zeros((x_train.shape[0],x_train.shape[1],20)))
 Y_v = model.predict_proba(x_validate)
 # 
 # 

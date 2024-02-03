@@ -159,18 +159,18 @@ class BiasedRecurrentClassifier(MLPClassifier):
             self.n_outputs_ = y.shape[2]         
         
         mask1 = list(range(recurrent_hidden - 1))
-        self.max_iter = 5
+        self.max_iter = 15
         print ("Fit X->I:")
-        #self._fit(X, I, incremental=False, fit_mask = mask1, predict_mask = mask1)
+        self._fit(X, I, incremental=False, fit_mask = mask1, predict_mask = mask1)
         #ws_tmp = self.warm_start
         self.warm_start = True
-        self.max_iter = 700
+        self.max_iter = 15
         self._no_improvement_count = 0
         print("Fit I->W->Y: ")
         self.best_loss_ = np.inf
         self.loss_curve_ = []
-        X = X[:,:,20:]
-        res = self._fit(X, y, incremental=False, fit_mask = {2,3})#list(range(recurrent_hidden - 1, self.n_layers_ - 1)))
+        #X = X[:,:,20:]
+        res = self._fit(X, y, incremental=False, fit_mask = list(range(recurrent_hidden - 1, self.n_layers_ - 1)))
         #self.warm_start = ws_tmp
         self.bias = None
         
@@ -217,7 +217,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
                     hidden_activation(activations[next_i][:,t])                  
                 
                 if bias is not None and next_i == self.recurrent_hidden:
-                    activations[next_i][:,t] = par_lr * (activations[next_i][:,t]) #+ bias[:,t]#.reshape(-1,1) 
+                    activations[next_i][:,t] = par_lr * (activations[next_i][:,t]) + bias[:,t]#.reshape(-1,1) 
                         
         return activations    
     
@@ -800,9 +800,9 @@ class BiasedRecurrentClassifier(MLPClassifier):
                 self._compute_loss_grad(
                     t, prev_i, n_samples, activations, deltas, coef_grads, intercept_grads
                     )
-        #if fit_mask is not None:
-        #    rem = set(range(self.n_layers_ - 1)).difference(fit_mask)
-        #    for r in rem:
-        #        coef_grads[r] = np.zeros(coef_grads[r].shape)
-        #        intercept_grads[r] = np.zeros(intercept_grads[r].shape)     
+        if fit_mask is not None:
+            rem = set(range(self.n_layers_ - 1)).difference(fit_mask)
+            for r in rem:
+                coef_grads[r] = np.zeros(coef_grads[r].shape)
+                intercept_grads[r] = np.zeros(intercept_grads[r].shape)     
         return loss, coef_grads, intercept_grads                      
