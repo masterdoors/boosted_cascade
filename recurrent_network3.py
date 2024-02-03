@@ -159,17 +159,19 @@ class BiasedRecurrentClassifier(MLPClassifier):
             self.n_outputs_ = y.shape[2]         
         
         mask1 = list(range(recurrent_hidden - 1))
-        self.max_iter = 15
+        self.max_iter = 45
+        self.learning_rate_init=0.001
         print ("Fit X->I:")
         self._fit(X, I, incremental=False, fit_mask = mask1, predict_mask = mask1)
         #ws_tmp = self.warm_start
         self.warm_start = True
-        self.max_iter = 15
+        self.max_iter = 45
         self._no_improvement_count = 0
         print("Fit I->W->Y: ")
         self.best_loss_ = np.inf
         self.loss_curve_ = []
         #X = X[:,:,20:]
+        self.learning_rate_init=0.0001
         res = self._fit(X, y, incremental=False, fit_mask = list(range(recurrent_hidden - 1, self.n_layers_ - 1)))
         #self.warm_start = ws_tmp
         self.bias = None
