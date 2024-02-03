@@ -144,6 +144,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
                 self.best_validation_score_ = None        
     
     def dual_fit(self,X,y,I, bias = None, par_lr = 1.0, recurrent_hidden = 3):
+        
         self._no_improvement_count = 0
         self.best_loss_ = np.inf
         self.loss_curve_ = []        
@@ -152,26 +153,26 @@ class BiasedRecurrentClassifier(MLPClassifier):
         self.recurrent_hidden = recurrent_hidden
         self.bias = bias
         self.par_lr = par_lr
-        
+        print ("Par lr: ", self.par_lr)
         if len(y.shape) < 3:
             self.n_outputs_ = 1
         else:
             self.n_outputs_ = y.shape[2]         
         
         mask1 = list(range(recurrent_hidden - 1))
-        self.max_iter = 45
-        self.learning_rate_init=0.001
+        self.max_iter = 10
+        #self.learning_rate_init=0.001
         print ("Fit X->I:")
         self._fit(X, I, incremental=False, fit_mask = mask1, predict_mask = mask1)
         #ws_tmp = self.warm_start
         self.warm_start = True
-        self.max_iter = 45
+        self.max_iter = 5
         self._no_improvement_count = 0
         print("Fit I->W->Y: ")
         self.best_loss_ = np.inf
         self.loss_curve_ = []
         #X = X[:,:,20:]
-        self.learning_rate_init=0.0001
+        #self.learning_rate_init=0.0001
         res = self._fit(X, y, incremental=False, fit_mask = list(range(recurrent_hidden - 1, self.n_layers_ - 1)))
         #self.warm_start = ws_tmp
         self.bias = None
@@ -316,9 +317,9 @@ class BiasedRecurrentClassifier(MLPClassifier):
         if self.n_outputs_ == 1:
             y_pred = y_pred.reshape((y_pred.shape[0],y_pred.shape[1]))
         if non_activations:
-            return y_pred, activations[1], non_activations[1]
+            return y_pred, activations[self.recurrent_hidden], non_activations[self.recurrent_hidden]
         else:     
-            return y_pred, activations[1]  
+            return y_pred, activations[self.recurrent_hidden]  
         
     def _loss_grad_lbfgs(
         self, packed_coef_inter, X, y, activations, deltas, coef_grads, intercept_grads, fit_mask = None, predict_mask = None
