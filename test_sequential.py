@@ -29,7 +29,7 @@ from sklearn.model_selection import train_test_split
 
 from recurrent_network3 import BiasedRecurrentClassifier
 
-#digits = datasets.load_digits()
+##digits = datasets.load_digits()
 
 #n_samples = len(digits.images)
 
