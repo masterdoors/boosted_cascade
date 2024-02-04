@@ -166,7 +166,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
         self._fit(X, I, incremental=False, fit_mask = mask1, predict_mask = mask1)
         #ws_tmp = self.warm_start
         self.warm_start = True
-        self.max_iter = 5
+        self.max_iter = 10
         self._no_improvement_count = 0
         print("Fit I->W->Y: ")
         self.best_loss_ = np.inf
