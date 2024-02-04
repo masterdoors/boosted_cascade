@@ -50,11 +50,11 @@ class MixedModel:
     def fit(self,X,y,X_,y_,bias,sample_weight = None):
         if sample_weight is not None:
             self.forest.fit(
-                            X.reshape(-1,X.shape[2]), y.flatten(), sample_weight.flatten()
+                            X.reshape(-1,X.shape[2]), y.reshape(-1,y.shape[2]), sample_weight.flatten()
                             )
         else:
             self.forest.fit(
-                            X.reshape(-1,X.shape[2]), y.flatten() 
+                            X.reshape(-1,X.shape[2]), y.reshape(-1,y.shape[2]) 
                             )
                 
         #print("Forest train X: ",X[1,2,:20])
@@ -67,7 +67,7 @@ class MixedModel:
         for i in range(self.max_iter):
             print ("Outer loop iter: ", i)
             self.network.hidden_layer_sizes = (I.shape[1],) + (I.shape[1],) + (self.network.hidden_layer_sizes[2],)
-            mm = self.network.dual_fit(X_, y_, I.reshape((y_.shape[0],y_.shape[1],-1)),
+            mm, hidden_grad = self.network.dual_fit(X_, y_, I.reshape((y_.shape[0],y_.shape[1],-1)),
                                    bias = bias, par_lr = self.learning_rate,
                                    recurrent_hidden = 3)
             
@@ -83,6 +83,7 @@ class MixedModel:
             print("Mixed score: ", accuracy_score(encoded_classes, y_.flatten()))
             I = I.reshape((-1,I.shape[2])) 
         self.network = mm
+        return hidden_grad
         
     def predict_proba(self, X, bias, returnI = False, learning_rate = 1.0):
         res = np.zeros((X.shape[0],X.shape[1]))

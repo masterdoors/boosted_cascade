@@ -180,8 +180,18 @@ class BiasedRecurrentClassifier(MLPClassifier):
         mixed_copy = copy.deepcopy(self)
         mixed_copy._prune(mask = mask1)
         mixed_copy.mixed_mode = True
+        
+        deltas = []
+        
+        for _ in range(len(self.layer_units)):
+            tmp = []
+            for _ in range(X.shape[1]):
+                tmp.append([])
+            deltas.append(tmp)        
+    
+        hidden_grad = self._get_delta(X, y, deltas, bias, predict_mask = None)[self.recurrent_hidden - 1]
 
-        return mixed_copy 
+        return mixed_copy, np.swapaxes(np.asarray(hidden_grad),0,1) 
 
     def _forward_pass(self, activations, bias = None, par_lr = 1.0):
         """Perform a forward pass on the network by computing the values
@@ -452,9 +462,16 @@ class BiasedRecurrentClassifier(MLPClassifier):
             self._initialize(y, self.layer_units, X.dtype)
 
         # Initialize lists
-
-        activations = [X] + [None] * (len(self.layer_units) - 1)
-        deltas = [[None]* X.shape[1]] * (len(activations) - 1)
+        activations = [X]
+        for _ in range(len(self.layer_units) - 1):
+            activations.append([])
+            
+        deltas = []
+        for _ in range(len(activations) - 1):
+            tmp = []
+            for _  in range(X.shape[1]):
+                tmp.append([])      
+            deltas.append(tmp)
 
         coef_grads = [
             np.empty((n_fan_in_, n_fan_out_), dtype=X.dtype)
@@ -695,6 +712,49 @@ class BiasedRecurrentClassifier(MLPClassifier):
 
         intercept_grads[layer] += np.mean(deltas[layer][t], 0)    
         
+    def _get_delta(self, X, y, deltas, bias, predict_mask = None):
+        # Forward propagate
+        activations = [X] + [None] * (len(self.layer_units) - 1)  
+        activations = self._forward_pass(activations, bias, par_lr = self.par_lr)#, mask = predict_mask)
+
+        if predict_mask is not None:
+            layer_range = sorted(list(predict_mask),reverse=True)
+        else:    
+            layer_range = list(range(self.n_layers_ - 2, -1, -1))
+
+        # Backward propagate
+        last = layer_range[0]
+
+        # The calculation of delta[last] here works with following
+        # combinations of output activation and loss function:
+        # sigmoid and binary cross entropy, softmax and categorical cross
+        # entropy, and identity with squared loss
+        
+        for t in range(X.shape[1] - 1, -1, -1):
+            if last == self.n_layers_ - 2:
+                eps = np.finfo(activations[last][:,t].dtype).eps
+                y_prob = logistic_sigmoid(activations[last + 1][:,t])
+                y_prob = np.clip(y_prob, eps, 1 - eps)
+            else:
+                y_prob = activations[last + 1][:,t]
+                    
+            deltas[last][t] = (y_prob - y[:,t].reshape(y_prob.shape))#.reshape(-1,1)
+    
+    
+            # Iterate over the hidden layers
+            for n,i in enumerate(layer_range[:-1]):
+                prev_i = layer_range[n + 1]
+                inplace_derivative = DERIVATIVES[self.activation[i - 1]]
+                #if i == self.n_layers_ -  2 and t < X.shape[1] - 1:
+                if i == self.recurrent_hidden and t < X.shape[1] - 1:
+                    deltas[prev_i][t] = safe_sparse_dot(deltas[i][t], self.coefs_[i].T)
+                    deltas[prev_i][t] += safe_sparse_dot(deltas[0][t + 1],self.coefs_[0][:deltas[i][t].shape[1],:].T)
+                else:    
+                    deltas[prev_i][t] = safe_sparse_dot(deltas[i][t], self.coefs_[i].T)
+                inplace_derivative(activations[i][:,t], deltas[prev_i][t])        
+                
+        return deltas  
+          
     def _backprop(self, X, y, activations, deltas, coef_grads, intercept_grads, bias, fit_mask = None, predict_mask = None):
         """Compute the MLP loss function and its corresponding derivatives
         with respect to each parameter: weights and bias vectors.

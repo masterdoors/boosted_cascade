@@ -120,7 +120,14 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         # perform boosting iterations
         i = begin_at_stage
         
+        if self._loss.n_classes == 2:
+            K = 1
+        else:
+            K = self._loss.n_classes         
+        
         history_sum = np.repeat((1. / self.hidden_size)*raw_predictions,self.hidden_size, axis=2).reshape(raw_predictions.shape[:2] + (self.hidden_size,) + (raw_predictions.shape[2],))
+        hidden_grad = np.zeros((X_.shape[0],X_.shape[1],self.hidden_size,K))
+        
         #non_activated = inversed_tanh(history_sum) 
 
         for i in range(begin_at_stage, self.n_layers):
@@ -144,6 +151,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                 sample_weight,
                 sample_mask,
                 random_state,
+                hidden_grad,
                 X_csc,
                 X_csr
             )
@@ -215,6 +223,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         sample_weight,
         sample_mask,
         random_state,
+        hidden_grad,
         X_csc=None,
         X_csr=None,
     ):
@@ -268,7 +277,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         )    
         
         network = BiasedRecurrentClassifier(alpha=1./10000.,
-                                  hidden_layer_sizes=(20,20,20),
+                                  hidden_layer_sizes=(self.hidden_size,self.hidden_size,self.hidden_size),
                                                activation=["tanh","logistic","identity","identity"],
                                                verbose=True,
                                                 max_iter=3500,
@@ -292,9 +301,9 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         #binned_history = history_sum#self._bin_data(binner_, history_sum.reshape(X.shape[0],-1), is_training_data=True).reshape(history_sum.shape)       
         
         if loss.n_classes == 2:
-            residual = np.zeros((X.shape[0],X.shape[1], 1))
+            residual = np.zeros((X.shape[0],X.shape[1],self.hidden_size ,1))
         else:    
-            residual = np.zeros((X.shape[0],X.shape[1], loss.n_classes))     
+            residual = np.zeros((X.shape[0],X.shape[1],self.hidden_size,loss.n_classes))     
             
         X = X_csr if X_csr is not None else X
 
@@ -307,45 +316,51 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         #for h in range(self.hidden_size):
         #    imps.append(importances(self.estimators_[i-1][0],X, h))
 
-        neg_grad_prev = None
-        for t in reversed(range(0,X.shape[1])):
-            #dummy loss
-            neg_grad = - loss.gradient(
-                y[:,t].copy(order='C'), raw_predictions[:,t].copy(order='C') 
-            )
-            
-            if i > 0:
-                wkh = []
-                for k in range(K):
-                    wkh_ = []
-                    for e in self.estimators_[i-1,k]:
-                        wkh_ += [e.estimators_[j].network.coefs_[1].flatten() for j in range(len(e.estimators_))]
-                    wkh_ = np.vstack(wkh_)
-                    #print("wkh:",wkh_.min(),wkh_.max())
-                    wkh_ = wkh_.mean(axis=0)
-                    wkh.append(wkh_) 
-                wkh = np.vstack(wkh)
+        #neg_grad_prev = None
+        if i == 0.:
+            for t in reversed(range(0,X.shape[1])):
+                #dummy loss
+                neg_grad = - loss.gradient(
+                    y[:,t].copy(order='C'), raw_predictions[:,t].copy(order='C') 
+                )
                 
-            else:
-                wkh = np.ones((self.hidden_size, K))*(1. / (self.hidden_size))  
+                if i > 0:
+                    wkh = []
+                    for k in range(K):
+                        wkh_ = []
+                        for e in self.estimators_[i-1,k]:
+                            wkh_ += [e.estimators_[j].network.coefs_[1].flatten() for j in range(len(e.estimators_))]
+                        wkh_ = np.vstack(wkh_)
+                        #print("wkh:",wkh_.min(),wkh_.max())
+                        wkh_ = wkh_.mean(axis=0)
+                        wkh.append(wkh_) 
+                    wkh = np.vstack(wkh)
+                    
+                else:
+                    wkh = np.ones((self.hidden_size, K))*(1. / (self.hidden_size))  
+                    
+                neg_grad = np.dot(neg_grad.reshape(-1,K), wkh.reshape(K,-1))#.sum(axis=1)          
                 
-            neg_grad = np.dot(neg_grad.reshape(-1,1), wkh.reshape(1,-1)).sum(axis=1)          
-            
-            if loss.n_classes == 2:
-                neg_grad = neg_grad.reshape(-1,1)
+                if loss.n_classes == 2:
+                    neg_grad = neg_grad.reshape(y.shape[0],-1,1)
+                    
+#                 if i > 0:
+#                     if neg_grad_prev is not None:
+#                         neg_grad += 0.5 * neg_grad_prev
+#                     neg_grad_prev = neg_grad                            
                 
-            if i > 0:
-                if neg_grad_prev is not None:
-                    neg_grad += 0.5 * neg_grad_prev
-                neg_grad_prev = neg_grad                            
-            
-            residual[:,t] = neg_grad   
+                residual[:,t] = neg_grad   
+        else:
+            for t in reversed(range(0,X.shape[1])):
+                residual[:,t] = hidden_grad[:,t]   
+                                    
 
         #print("R range:", residual.min(), residual.max())            
         history_sum_copy = history_sum.copy()
         binned_history = history_sum_copy
         raw_predictions.fill(0.)
         history_sum.fill(0.)
+        hidden_grad.fill(0.)
         
         for k in range(K):  
             if loss.n_classes > 2:
@@ -409,13 +424,14 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                     )
                 self.estimators_[i, k].append(kfold_estimator)                           
                 
-                raw_predictions_, history_sum_ = kfold_estimator.fit(X_a.astype(float), X_aug.astype(float),
-                                                                      residual[:,:, k], y,
+                raw_predictions_, history_sum_, grad  = kfold_estimator.fit(X_a.astype(float), X_aug.astype(float),
+                                                                      residual[:,:,:, k], y,
                                                                        history_sum_copy[:,:,:,k],
                                                                        sample_weight)
                 raw_predictions[:,:,k] += raw_predictions_.reshape(raw_predictions[:,:,k].shape)
                 history_sum[:,:,:,k] += history_sum_.reshape(history_sum[:,:,:,k].shape)
-     
+                hidden_grad[:,:,:,k] += grad
+                
         #self.predict_stage(self, i, X, history_sum) 
         #history_sum[:,:,:,:] = np.clip(history_sum,-2.99,2.99)
         #raw_predictions[:,:,:] = np.clip(raw_predictions,-2.99,2.99)
