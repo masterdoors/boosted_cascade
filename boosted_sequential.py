@@ -281,8 +281,8 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                                                activation=["tanh","logistic","identity","identity"],
                                                verbose=True,
                                                 max_iter=3500,
-                                                learning_rate_init=0.0001, tol = 0.0001,
-                                                 n_iter_no_change = 15, batch_size=6, epsilon=1e-7, early_stopping=False)    
+                                                learning_rate_init=0.000001, tol = 0.0001,
+                                                 n_iter_no_change = 100, batch_size=6, epsilon=1e-7, early_stopping=False)    
 
         # Need to pass a copy of raw_predictions to negative_gradient()
         # because raw_predictions is partially updated at the end of the loop

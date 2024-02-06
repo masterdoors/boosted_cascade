@@ -85,7 +85,7 @@ class KFoldWrapper(object):
         kf = KFold(n_splits=self.n_splits, random_state=None, shuffle=True)
         for train_index, test_index in kf.split(X):
             bias = history_k
-            estimator = MixedModel(self.dummy_estimator_f, self.dummy_estimator_n, max_iter = 5,learning_rate = self.learning_rate)
+            estimator = MixedModel(self.dummy_estimator_f, self.dummy_estimator_n, max_iter = 10,learning_rate = self.learning_rate)
             if sample_weight is not None:
                 hidden_grad[train_index] += estimator.fit(X[train_index],y[train_index],X_[train_index],y_[train_index],bias[train_index],sample_weight[train_index])
             else:
