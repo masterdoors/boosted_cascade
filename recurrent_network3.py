@@ -145,7 +145,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
     
 
     def dual_fit2(self,X,y,I, bias = None, par_lr = 1.0, recurrent_hidden = 3):
-        self.max_iter = 30
+        self.max_iter = 300
         #self.n_iter_no_change = 1000
         self._no_improvement_count = 0
         
@@ -153,7 +153,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
         self.recurrent_hidden = recurrent_hidden
         self.bias = bias
         self.par_lr = par_lr        
-        
+        print ("Par lr: ", self.par_lr)        
         if len(y.shape) < 3:
             self.n_outputs_ = 1
         else:
@@ -416,7 +416,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
         grad : array-like, shape (number of nodes of all layers,)
         """
         self._unpack(packed_coef_inter)
-        loss, coef_grads, intercept_grads = self._backprop(
+        loss, coef_grads, intercept_grads,_,_ = self._backprop(
             X, y, I, activations, deltas, coef_grads, intercept_grads,self.bias,fit_mask, predict_mask
         )
         grad = _pack(coef_grads, intercept_grads)
@@ -646,6 +646,8 @@ class BiasedRecurrentClassifier(MLPClassifier):
                     sample_idx = shuffle(sample_idx, random_state=self._random_state)
 
                 accumulated_loss = 0.0
+                al1 = 0.0
+                al2 = 0.0
                 bc = 0
                 for batch_slice in gen_batches(n_samples, batch_size):
                     if self.shuffle:
@@ -660,7 +662,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
                         I_batch = I[batch_slice]
 
                     activations[0] = X_batch
-                    batch_loss, coef_grads, intercept_grads = self._backprop(
+                    batch_loss, coef_grads, intercept_grads, bl1, bl2 = self._backprop(
                         X_batch,
                         y_batch,
                         I_batch,
@@ -675,6 +677,15 @@ class BiasedRecurrentClassifier(MLPClassifier):
                     accumulated_loss += batch_loss * (
                         batch_slice.stop - batch_slice.start
                     )
+                    
+                    al1 += bl1 * (
+                        batch_slice.stop - batch_slice.start
+                    )
+                    
+                    al2 += bl2 * (
+                        batch_slice.stop - batch_slice.start
+                    )
+                     
                     bc += 1
                     #if it == 0 and bc < 20:
                     #    print("Acc loss: ", accumulated_loss / (batch_size * bc))
@@ -685,10 +696,13 @@ class BiasedRecurrentClassifier(MLPClassifier):
                 self.n_iter_ += 1
                 self.loss_ = accumulated_loss / X.shape[0]
                 
+                l1 = al1 / X.shape[0]
+                l2 = al2 / X.shape[0]
+                
                 self.t_ += n_samples
                 self.loss_curve_.append(self.loss_)
                 if self.verbose:
-                    print("Iteration %d, loss = %.8f" % (self.n_iter_, self.loss_))
+                    print("Iteration %d, loss = %.8f" % (self.n_iter_, self.loss_),l1,l2)
 
                 # update no_improvement_count based on training loss or
                 # validation score according to early_stopping
@@ -865,9 +879,10 @@ class BiasedRecurrentClassifier(MLPClassifier):
         else:
             loss_func_name = "binary_log_loss"    
         
-        loss = LOSS_FUNCTIONS[loss_func_name](y.flatten(), activations[last + 1].flatten())
-        loss += LOSS_FUNCTIONS["original_binary_log_loss"](I.flatten(), activations[self.recurrent_hidden - 1].flatten())
+        loss_ = LOSS_FUNCTIONS[loss_func_name](y.flatten(), activations[last + 1].flatten())
+        loss2 = LOSS_FUNCTIONS["original_binary_log_loss"](I.flatten(), activations[self.recurrent_hidden - 1].flatten())
         
+        loss = loss_ + loss2
 
         # Add L2 regularization term to loss
         values = 0
@@ -910,7 +925,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
                     deltas[prev_i][t] = safe_sparse_dot(deltas[i][t], self.coefs_[i].T)
                     
                 if i == self.recurrent_hidden - 1:
-                    deltas[prev_i][t] += activations[i][:,t] - I[:,t].reshape(activations[i][:,t].shape)    
+                    deltas[prev_i][t] += 0.1 * (activations[i][:,t] - I[:,t].reshape(activations[i][:,t].shape))    
                     
                 inplace_derivative(activations[i][:,t], deltas[prev_i][t])        
                 
@@ -923,4 +938,4 @@ class BiasedRecurrentClassifier(MLPClassifier):
 #             for r in rem:
 #                 coef_grads[r] = np.zeros(coef_grads[r].shape)
 #                 intercept_grads[r] = np.zeros(intercept_grads[r].shape)     
-        return loss, coef_grads, intercept_grads                      
+        return loss, coef_grads, intercept_grads, loss_, loss2                      

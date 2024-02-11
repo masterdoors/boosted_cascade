@@ -281,7 +281,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                                                activation=["tanh","logistic","identity","identity"],
                                                verbose=True,
                                                 max_iter=3500,
-                                                learning_rate_init=0.000001, tol = 0.0001,
+                                                learning_rate_init=0.00001, tol = 0.0001,
                                                  n_iter_no_change = 100, batch_size=6, epsilon=1e-7, early_stopping=False)    
 
         # Need to pass a copy of raw_predictions to negative_gradient()
@@ -530,7 +530,7 @@ class CascadeSequentialClassifier(ClassifierMixin, BaseSequentialBoostingDummy):
         self,
         *,
         loss="log_loss",
-        learning_rate=0.8,
+        learning_rate=1.0,
         n_estimators=2,
         n_layers=3,
         subsample=1.0,

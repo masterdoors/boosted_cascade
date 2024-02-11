@@ -73,7 +73,7 @@ class MixedModel:
             
             tmp = self.network
             self.network = mm
-            y_pred,_,I_,X = self.predict_proba(X_, bias, returnI = True)
+            y_pred,_,I_,X = self.predict_proba(X_, bias, returnI = True, learning_rate=self.learning_rate)
             
             #print("I diff: ", np.bitwise_xor(I.flatten().astype(int),I_.flatten().astype(int)).sum(), " of ", I.flatten().shape[0])
             I = I_
@@ -81,6 +81,12 @@ class MixedModel:
             encoded_classes = np.asarray(y_pred.flatten() >= 0, dtype=int)
             
             print("Mixed score: ", accuracy_score(encoded_classes, y_.flatten()))
+            
+            
+            r, _ = self.network.predict_proba(X_,  bias = bias, par_lr = self.learning_rate)
+            encoded_classes = np.asarray(r.flatten() >= 0, dtype=int)
+            
+            print("Mixed score 2: ", accuracy_score(encoded_classes, y_.flatten()))            
             I = I.reshape((-1,I.shape[2])) 
         self.network = mm
         return hidden_grad

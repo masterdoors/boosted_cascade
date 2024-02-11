@@ -82,19 +82,32 @@ class KFoldWrapper(object):
         hidden = np.zeros((n_samples,  X.shape[1], self.hidden_size))  
         hidden_grad = np.zeros((n_samples,  X.shape[1], self.hidden_size))      
         #print("y:",y.min(), y.max())
-        kf = KFold(n_splits=self.n_splits, random_state=None, shuffle=True)
-        for train_index, test_index in kf.split(X):
-            bias = history_k
-            estimator = MixedModel(self.dummy_estimator_f, self.dummy_estimator_n, max_iter = 10,learning_rate = self.learning_rate)
-            if sample_weight is not None:
-                hidden_grad[train_index] += estimator.fit(X[train_index],y[train_index],X_[train_index],y_[train_index],bias[train_index],sample_weight[train_index])
-            else:
-                hidden_grad[train_index] += estimator.fit(X[train_index],y[train_index],X_[train_index],y_[train_index],bias[train_index])     
-            self.estimators_.append(estimator)
-            out_, hidden_ = estimator.predict_proba(X_[test_index],bias=bias[test_index],learning_rate = self.learning_rate)
-            
-            out[test_index] += out_
-            hidden[test_index,:] += hidden_
+#         kf = KFold(n_splits=self.n_splits, random_state=None, shuffle=True)
+#         for train_index, test_index in kf.split(X):
+#             bias = history_k
+#             estimator = MixedModel(self.dummy_estimator_f, self.dummy_estimator_n, max_iter = 3,learning_rate = self.learning_rate)
+#             if sample_weight is not None:
+#                 hidden_grad[train_index] += estimator.fit(X[train_index],y[train_index],X_[train_index],y_[train_index],bias[train_index],sample_weight[train_index])
+#             else:
+#                 hidden_grad[train_index] += estimator.fit(X[train_index],y[train_index],X_[train_index],y_[train_index],bias[train_index])     
+#             self.estimators_.append(estimator)
+#             out_, hidden_ = estimator.predict_proba(X_[test_index],bias=bias[test_index],learning_rate = self.learning_rate)
+#             
+#             out[test_index] += out_
+#             hidden[test_index,:] += hidden_
+
+        bias = history_k
+        estimator = MixedModel(self.dummy_estimator_f, self.dummy_estimator_n, max_iter = 3,learning_rate = self.learning_rate)
+        if sample_weight is not None:
+            hidden_grad += estimator.fit(X,y,X_,y_,bias,sample_weight)
+        else:
+            hidden_grad += estimator.fit(X,y,X_,y_,bias)     
+        self.estimators_.append(estimator)
+        out_, hidden_ = estimator.predict_proba(X_,bias=bias,learning_rate = self.learning_rate)
+             
+        out += out_
+        hidden += hidden_
+
             
         return self.factor * out, self.factor * hidden, hidden_grad    
 
@@ -108,4 +121,4 @@ class KFoldWrapper(object):
             out += out_
             hidden += hidden_            
 
-        return self.factor * out / self.n_splits, self.factor * hidden / self.n_splits  # return the average prediction
+        return self.factor * out, self.factor * hidden   # return the average prediction
