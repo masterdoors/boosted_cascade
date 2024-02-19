@@ -29,30 +29,30 @@ from sklearn.model_selection import train_test_split
 
 from recurrent_network3 import BiasedRecurrentClassifier
 
-##digits = datasets.load_digits()
-
-#n_samples = len(digits.images)
-
-#data = digits.images.reshape((n_samples, -1))
-
-#Y =  np.asarray(digits.target).astype('int64')
-
-#indexes = np.logical_or(Y == 1, Y == 0)
-#data = data[indexes]
-#Y = Y[indexes]
-
-#print (np.unique(Y,return_counts=True))
-
-#for i in range(len(Y)):
-#    Y[i] = Y[i] + 1
-    
-#print(data.shape)    
-
-#x = preprocessing.normalize(data, copy=False, axis = 0).reshape(-1,3,data.shape[1])
-#Y = Y.reshape(-1,3)
-
-#x_train, x_validate, Y_train, Y_validate = train_test_split(
-#    x, Y, test_size=0.5, shuffle=True)
+# digits = datasets.load_digits()
+# 
+# n_samples = len(digits.images)
+# 
+# data = digits.images.reshape((n_samples, -1))
+# 
+# Y =  np.asarray(digits.target).astype('int64')
+# 
+# indexes = np.logical_or(Y == 1, Y == 0)
+# data = data[indexes]
+# Y = Y[indexes]
+# 
+# print (np.unique(Y,return_counts=True))
+# 
+# for i in range(len(Y)):
+#     Y[i] = Y[i] + 1
+#     
+# print(data.shape)    
+# 
+# x = preprocessing.normalize(data, copy=False, axis = 0).reshape(-1,3,data.shape[1])
+# Y = Y.reshape(-1,3)
+# 
+# x_train, x_validate, Y_train, Y_validate = train_test_split(
+#     x, Y, test_size=0.5, shuffle=True)
 
 
 #X = np.asarray([[0,0,1,1,0],[1,0,0,0,0],[0,1,0,0,1],[1,0,1,1,0],[1,1,0,0,1],[0,1,1,1,1],[0,0,0,0,0],[1,1,1,1,1]]).reshape(8,5,1)
@@ -95,7 +95,7 @@ X = np.asarray([list(sampler.sample(str_len, generator))
 
 parser = Parser(grammar)
 low_perp = compute_lower_bound_perplexity(sampler, parser, 1, X)   
-    
+   
 
 
 
@@ -263,7 +263,7 @@ model = CascadeSequentialClassifier(C=100.0, n_layers=10, verbose=2, n_estimator
 
 model.fit(x_train, Y_train )#,bias = np.zeros((x_train.shape[0],x_train.shape[1],20)), recurrent_hidden = 3)#, monitor = monitor)
  
-model.dual_fit(x_train,Y_train,I = [], bias = np.zeros((x_train.shape[0],x_train.shape[1],20)))
+#model.dual_fit(x_train,Y_train,I = [], bias = np.zeros((x_train.shape[0],x_train.shape[1],20)))
 Y_v = model.predict_proba(x_validate)
 # 
 # 

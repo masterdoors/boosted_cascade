@@ -324,31 +324,13 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                     y[:,t].copy(order='C'), raw_predictions[:,t].copy(order='C') 
                 )
                 
-                if i > 0:
-                    wkh = []
-                    for k in range(K):
-                        wkh_ = []
-                        for e in self.estimators_[i-1,k]:
-                            wkh_ += [e.estimators_[j].network.coefs_[1].flatten() for j in range(len(e.estimators_))]
-                        wkh_ = np.vstack(wkh_)
-                        #print("wkh:",wkh_.min(),wkh_.max())
-                        wkh_ = wkh_.mean(axis=0)
-                        wkh.append(wkh_) 
-                    wkh = np.vstack(wkh)
-                    
-                else:
-                    wkh = np.ones((self.hidden_size, K))*(1. / (self.hidden_size))  
+                wkh = np.ones((self.hidden_size, K))*(1. / (self.hidden_size))  
                     
                 neg_grad = np.dot(neg_grad.reshape(-1,K), wkh.reshape(K,-1))#.sum(axis=1)          
                 
                 if loss.n_classes == 2:
                     neg_grad = neg_grad.reshape(y.shape[0],-1,1)
                     
-#                 if i > 0:
-#                     if neg_grad_prev is not None:
-#                         neg_grad += 0.5 * neg_grad_prev
-#                     neg_grad_prev = neg_grad                            
-                
                 residual[:,t] = neg_grad   
         else:
             for t in reversed(range(0,X.shape[1])):
@@ -530,7 +512,7 @@ class CascadeSequentialClassifier(ClassifierMixin, BaseSequentialBoostingDummy):
         self,
         *,
         loss="log_loss",
-        learning_rate=1.0,
+        learning_rate=0.5,
         n_estimators=2,
         n_layers=3,
         subsample=1.0,

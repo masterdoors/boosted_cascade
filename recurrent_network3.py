@@ -31,6 +31,9 @@ from itertools import chain
 
 from sklearn.preprocessing import LabelBinarizer
 
+import nlopt
+
+
 def _pack(coefs_, intercepts_):
     """Pack the parameters into a single vector."""
     return np.hstack([l.ravel() for l in coefs_ + intercepts_])
@@ -182,6 +185,153 @@ class BiasedRecurrentClassifier(MLPClassifier):
 
         return mixed_copy, np.swapaxes(np.asarray(hidden_grad),0,1) 
     
+    
+    def mockup_fit(self,X,y,X_,I, bias = None, par_lr = 1.0, recurrent_hidden = 3):
+        mask1 = list(range(recurrent_hidden - 1))
+        self._no_improvement_count = 0
+        self.best_loss_ = np.inf
+        self.loss_curve_ = []        
+        
+        self.mixed_mode = False
+        self.recurrent_hidden = recurrent_hidden
+        self.bias = bias
+        self.par_lr = par_lr
+        print ("Par lr: ", self.par_lr)
+        if len(y.shape) < 3:
+            self.n_outputs_ = 1
+        else:
+            self.n_outputs_ = y.shape[2]          
+
+        print ("Fit X->I:")
+        self.mixed_mode = True
+        
+        ### copied from _fit
+        # Make sure self.hidden_layer_sizes is a list
+        hidden_layer_sizes = self.hidden_layer_sizes
+        if not hasattr(hidden_layer_sizes, "__iter__"):
+            hidden_layer_sizes = [hidden_layer_sizes]
+        hidden_layer_sizes = list(hidden_layer_sizes)
+
+        if np.any(np.array(hidden_layer_sizes) <= 0):
+            raise ValueError(
+                "hidden_layer_sizes must be > 0, got %s." % hidden_layer_sizes
+            )
+        first_pass = not hasattr(self, "coefs_") or (
+            not self.warm_start 
+        )
+
+        n_features = X.shape[2]
+
+        if self.n_outputs_ is None:
+            if len(y.shape) < 3:
+                self.n_outputs_ = 1
+            else:
+                self.n_outputs_ = y.shape[2]    
+
+        if self.mixed_mode:
+            self.layer_units = [n_features] + hidden_layer_sizes + [self.n_outputs_]
+        else:    
+            self.layer_units = [n_features + hidden_layer_sizes[len(hidden_layer_sizes) - 1]] + hidden_layer_sizes + [self.n_outputs_]
+
+        # check random state
+        self._random_state = check_random_state(self.random_state)
+
+        if first_pass:
+            # First time training the model
+            self._initialize(y, self.layer_units, X.dtype)
+
+        # Initialize lists
+        activations = [X]
+        for _ in range(len(self.layer_units) - 1):
+            activations.append([])
+            
+        deltas = []
+        for _ in range(len(activations) - 1):
+            tmp = []
+            for _  in range(X.shape[1]):
+                tmp.append([])      
+            deltas.append(tmp)
+
+        coef_grads = [
+            np.empty((n_fan_in_, n_fan_out_), dtype=X.dtype)
+            for n_fan_in_, n_fan_out_ in zip(self.layer_units[:-1], self.layer_units[1:])
+        ]
+
+        intercept_grads = [
+            np.empty(n_fan_out_, dtype=X.dtype) for n_fan_out_ in self.layer_units[1:]
+        ]        
+        #####
+        N = self.coefs_[0].shape[0] * self.coefs_[0].shape[1]
+        N += self.coefs_[1].shape[0] * self.coefs_[1].shape[1]
+        
+        counter = 0
+        
+        activations = [X_] + [None] * (len(self.layer_units) - 1)      
+          
+        def opt_func1(coefs_, grad):
+            n = self.coefs_[0].shape[0] * self.coefs_[0].shape[1] 
+            self.coefs_[0] = coefs_[:n].reshape(self.coefs_[0].shape)
+            self.coefs_[1] = coefs_[n:].reshape(self.coefs_[1].shape)
+            activations = self._forward_pass(activations, bias = bias, par_lr = par_lr, predict_mask = mask1)
+            out = activations[recurrent_hidden - 1]
+            l =  LOSS_FUNCTIONS[self.loss](I.flatten(), out.flatten())
+            counter += 1
+            return l
+        
+        opt = nlopt.opt(nlopt.LN_COBYLA, N)
+        opt.set_min_objective(opt_func1)
+        opt.set_xtol_rel(0.0001)
+        
+        init_x = np.random.normal(1,N) 
+        n = self.coefs_[0].shape[0] * self.coefs_[0].shape[1] 
+        opt_coefs = opt.optimize(init_x)
+        self.coefs_[0] = opt_coefs[:n].reshape(self.coefs_[0].shape)
+        self.coefs_[1] = opt_coefs[n:].reshape(self.coefs_[1].shape)        
+        
+        self.mixed_mode = False
+        activations = [X] + [None] * (len(self.layer_units) - 1)        
+
+        def opt_func2(coefs_, grad):
+            n = self.coefs_[2].shape[0] * self.coefs_[2].shape[1] 
+            self.coefs_[2] = coefs_[:n].reshape(self.coefs_[2].shape)
+            self.coefs_[3] = coefs_[n:].reshape(self.coefs_[3].shape)
+            activations = self._forward_pass(activations, bias = bias, par_lr = par_lr)
+            out = activations[recurrent_hidden - 1]
+            return LOSS_FUNCTIONS[self.loss](I.flatten(), out.flatten())
+        
+        N = self.coefs_[2].shape[0] * self.coefs_[2].shape[1]
+        N += self.coefs_[3].shape[0] * self.coefs_[3].shape[1]        
+        
+        opt = nlopt.opt(nlopt.LN_COBYLA, N)
+        opt.set_min_objective(opt_func2)
+        opt.set_xtol_rel(0.0001)  
+        
+        init_x = np.random.normal(1,N)       
+        
+        opt_coefs = opt.optimize(init_x)
+        n = self.coefs_[2].shape[0] * self.coefs_[2].shape[1]         
+        self.coefs_[2] = opt_coefs[:n].reshape(self.coefs_[2].shape)
+        self.coefs_[3] = opt_coefs[n:].reshape(self.coefs_[3].shape)   
+        
+        self.bias = None
+        
+        mixed_copy = copy.deepcopy(self)
+        mixed_copy._prune(mask = mask1)
+        mixed_copy.mixed_mode = True
+        
+        deltas = []
+        
+        for _ in range(len(self.layer_units)):
+            tmp = []
+            for _ in range(X.shape[1]):
+                tmp.append([])
+            deltas.append(tmp)        
+    
+        hidden_grad = self._get_delta(X, y, deltas, bias, predict_mask = None)[self.recurrent_hidden - 1]
+
+        return mixed_copy, np.swapaxes(np.asarray(hidden_grad),0,1) 
+        
+    
     def dual_fit(self,X,y,X_,I, bias = None, par_lr = 1.0, recurrent_hidden = 3):
         
         self._no_improvement_count = 0
@@ -200,15 +350,16 @@ class BiasedRecurrentClassifier(MLPClassifier):
         
         mask1 = list(range(recurrent_hidden - 1))
         #self.n_iter_no_change = 50
-        self.max_iter = 30
-        self.learning_rate_init=0.0001
+        self.max_iter = 5
+        self.learning_rate_init=0.001
+        self.alpha=1./100.
         print ("Fit X->I:")
         self.mixed_mode = True
         self._fit(X_, I, I, incremental=False, fit_mask = mask1, predict_mask = mask1)
         self.mixed_mode = False
         #ws_tmp = self.warm_start
         self.warm_start = True
-        self.max_iter = 30
+        self.max_iter = 5
         #self.n_iter_no_change = 1000
         self._no_improvement_count = 0
         print("Fit I->W->Y: ")
@@ -216,6 +367,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
         self.loss_curve_ = []
         #X = X[:,:,20:]
         self.learning_rate_init=0.00001
+        self.alpha=1./100.
         self._fit(X, y, I,incremental=False, fit_mask = list(range(recurrent_hidden - 1, self.n_layers_ - 1)))
         #self.warm_start = ws_tmp
         self.bias = None
@@ -887,7 +1039,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
         else:
             loss_func_name = "binary_log_loss"    
         
-        loss = LOSS_FUNCTIONS[loss_func_name](y.flatten(), activations[last + 1].flatten())
+        loss_ = LOSS_FUNCTIONS[loss_func_name](y.flatten(), activations[last + 1].flatten())
         #loss2 = LOSS_FUNCTIONS["original_binary_log_loss"](I.flatten(), activations[self.recurrent_hidden - 1].flatten())
         
         #loss = loss_ + loss2
@@ -897,7 +1049,9 @@ class BiasedRecurrentClassifier(MLPClassifier):
         for s in self.coefs_:
             s = s.ravel()
             values += np.dot(s, s)
-        loss += (0.5 * self.alpha) * values / n_samples
+        loss2 = (0.5 * self.alpha) * values / n_samples
+        
+        loss = loss_ + loss2
 
         # The calculation of delta[last] here works with following
         # combinations of output activation and loss function:
@@ -946,4 +1100,4 @@ class BiasedRecurrentClassifier(MLPClassifier):
             for r in rem:
                 coef_grads[r] = np.zeros(coef_grads[r].shape)
                 intercept_grads[r] = np.zeros(intercept_grads[r].shape)     
-        return loss, coef_grads, intercept_grads, loss, loss                      
+        return loss, coef_grads, intercept_grads, loss_, loss2                      

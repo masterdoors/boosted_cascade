@@ -7,6 +7,37 @@ import copy
 import numpy as np
 from sklearn.ensemble._forest import _generate_unsampled_indices, _get_n_samples_bootstrap, _generate_sample_indices
 from sklearn.metrics import accuracy_score
+from scipy.special import expit as logistic_sigmoid
+from scipy.special import xlogy
+
+def binary_log_loss(y_true, y_prob):
+    """Compute binary logistic loss for classification.
+
+    This is identical to log_loss in binary classification case,
+    but is kept for its use in multilabel case.
+
+    Parameters
+    ----------
+    y_true : array-like or label indicator matrix
+        Ground truth (correct) labels.
+
+    y_prob : array-like of float, shape = (n_samples, 1)
+        Predicted probabilities, as returned by a classifier's
+        predict_proba method.
+
+    Returns
+    -------
+    loss : float
+        The degree to which the samples are correctly predicted.
+    """
+    eps = np.finfo(y_prob.dtype).eps
+    logistic_sigmoid(y_prob, out=y_prob)
+    y_prob = np.clip(y_prob, eps, 1 - eps)
+    
+    return (
+        -(xlogy(y_true, y_prob).sum() + xlogy(1 - y_true, 1 - y_prob).sum())
+        / y_prob.shape[0]
+    )
 
 class MixedModel:
     def __init__(self, forest_estimator, network_estimator, max_iter = 5,learning_rate = 1.):
@@ -67,9 +98,13 @@ class MixedModel:
         for i in range(self.max_iter):
             print ("Outer loop iter: ", i)
             self.network.hidden_layer_sizes = (I.shape[1],) + (I.shape[1],) + (self.network.hidden_layer_sizes[2],)
-            mm, hidden_grad = self.network.dual_fit(X_, y_, X, I.reshape((y_.shape[0],y_.shape[1],-1)),
+#             mm, hidden_grad = self.network.dual_fit(X_, y_, X, I.reshape((y_.shape[0],y_.shape[1],-1)),
+#                                    bias = bias, par_lr = self.learning_rate,
+#                                    recurrent_hidden = 3)
+            
+            mm, hidden_grad = self.network.mockup_fit(X_, y_, X, I.reshape((y_.shape[0],y_.shape[1],-1)),
                                    bias = bias, par_lr = self.learning_rate,
-                                   recurrent_hidden = 3)
+                                   recurrent_hidden = 3)            
             
             tmp = self.network
             self.network = mm
@@ -81,7 +116,10 @@ class MixedModel:
             encoded_classes = np.asarray(y_pred.flatten() >= 0, dtype=int)
             
             print("Mixed score: ", accuracy_score(encoded_classes, y_.flatten()))
-            
+                    
+            l = binary_log_loss(y_.flatten(), y_pred.flatten())
+                                
+            print("Mixed loss: ", l)                    
             
             r, _ = self.network.predict_proba(X_,  bias = bias, par_lr = self.learning_rate)
             encoded_classes = np.asarray(r.flatten() >= 0, dtype=int)
@@ -106,8 +144,12 @@ class MixedModel:
             I = self.getIndicators(self.forest, X_aug, False, False)
             I_list.append(I)
             I = np.swapaxes(np.asarray(I_list),0,1)
-            res[:,:t + 1], hidden[:,:t + 1] = self.network.predict_proba(I,  bias = bias, par_lr = learning_rate)
+            res[:,:t+1], hidden[:,:t+1] = self.network.predict_proba(I,  bias = bias, par_lr = learning_rate)
 
+        print("Mixed prediction result sample: ", res[0][:5]) 
+        print("With bias: ", bias[0][1][:5])
+        print("With X_augs: ", X_aug[0])
+        
         if returnI:
             return res, hidden, I, np.swapaxes(np.asarray(X_augs),0,1)
         else:    
