@@ -33,6 +33,8 @@ from sklearn.preprocessing import LabelBinarizer
 
 import nlopt
 
+from scipy.optimize import  minimize
+
 
 def _pack(coefs_, intercepts_):
     """Pack the parameters into a single vector."""
@@ -258,12 +260,22 @@ class BiasedRecurrentClassifier(MLPClassifier):
         
         counter = 0
         
-        def opt_func1(coefs_, grad):
+        print("N: ", N)
+
+        
+        def opt_func1(coefs_, grad = None):
             nonlocal counter
             nonlocal activations
             nonlocal bias
             nonlocal par_lr
             nonlocal mask1
+            
+            #idx = np.random.randint(0,X_.shape[0],20)
+            
+            # Initialize lists
+            activations = [X_]
+            for _ in range(len(self.layer_units) - 1):
+                activations.append([])            
 
             n = self.coefs_[0].shape[0] * self.coefs_[0].shape[1] 
             self.coefs_[0] = coefs_[:n].reshape(self.coefs_[0].shape)
@@ -276,20 +288,49 @@ class BiasedRecurrentClassifier(MLPClassifier):
             self.loss = 'original_binary_log_loss'
             
             l =  LOSS_FUNCTIONS[self.loss](I.flatten(), out.flatten())
-            if counter % 10000 == 0:
-                print(counter,l)
+            values = 0
+            for s in self.coefs_:
+                s = s.ravel()
+                values += np.dot(s, s)            
+            
+            l2 =(0.5 * float(1./100)) * values / activations[0].shape[0]
+            
+            
+            if counter % 1000 == 0:
+                encoded_classes = np.asarray(out.flatten() >= 0, dtype=int)
+                
+                print("Acc: ", accuracy_score(encoded_classes, I.flatten()))                   
+                
+                print(counter,l,l2,l + l2)
             
             counter += 1
-            return l
+            return l + l2
         
-        opt = nlopt.opt(nlopt.LN_COBYLA, N)
+        opt = nlopt.opt(nlopt.GN_ESCH, N)
         opt.set_min_objective(opt_func1)
-        opt.set_xtol_rel(0.0001)
+        opt.set_xtol_rel(0.01)
+         
+        opt.set_lower_bounds(-100)
+        opt.set_upper_bounds(100)     
+        opt.set_maxeval(50000)   
         
         init_x = np.hstack([self.coefs_[0].flatten(),self.coefs_[1].flatten(),self.intercepts_[0].flatten(),self.intercepts_[1].flatten()]) 
         n = self.coefs_[0].shape[0] * self.coefs_[0].shape[1] 
         n2 = n + self.coefs_[1].shape[0] * self.coefs_[1].shape[1]
         opt_coefs = opt.optimize(init_x)
+        
+        counter = 0 
+        opt = nlopt.opt(nlopt.LN_BOBYQA, N)
+        opt.set_min_objective(opt_func1)
+        opt.set_xtol_rel(0.01)
+         
+        opt.set_lower_bounds(-100)
+        opt.set_upper_bounds(100)       
+        opt_coefs = opt.optimize(opt_coefs)
+        
+        
+        #opt_coefs  = minimize(opt_func1,init_x, method = 'COBYLA')
+        
         self.coefs_[0] = opt_coefs[:n].reshape(self.coefs_[0].shape)
         self.coefs_[1] = opt_coefs[n:n2].reshape(self.coefs_[1].shape)
         self.intercepts_[0] = opt_coefs[n2:n2 + self.intercepts_[0].shape[0]]
@@ -329,7 +370,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
             counter += 1               
             l = LOSS_FUNCTIONS[self.loss](I.flatten(), out.flatten())
             
-            if counter % 10000 == 0:
+            if counter % 100 == 0:
                 print(counter,l) 
                             
             return l
@@ -339,7 +380,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
         
         opt = nlopt.opt(nlopt.LN_COBYLA, N)
         opt.set_min_objective(opt_func2)
-        opt.set_xtol_rel(0.0001)  
+        opt.set_xtol_rel(0.01)  
         
         init_x = np.hstack([self.coefs_[2].flatten(),self.coefs_[3].flatten()])       
         
