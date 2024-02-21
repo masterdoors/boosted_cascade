@@ -212,131 +212,139 @@ class BiasedRecurrentClassifier(MLPClassifier):
         if not hasattr(hidden_layer_sizes, "__iter__"):
             hidden_layer_sizes = [hidden_layer_sizes]
         hidden_layer_sizes = list(hidden_layer_sizes)
-
-        if np.any(np.array(hidden_layer_sizes) <= 0):
-            raise ValueError(
-                "hidden_layer_sizes must be > 0, got %s." % hidden_layer_sizes
-            )
-        first_pass = not hasattr(self, "coefs_") or (
-            not self.warm_start 
-        )
-
-        n_features = X.shape[2]
-
-        if self.n_outputs_ is None:
-            if len(y.shape) < 3:
-                self.n_outputs_ = 1
-            else:
-                self.n_outputs_ = y.shape[2]    
-
-        if not self.mixed_mode:
-            self.layer_units = [n_features] + hidden_layer_sizes + [self.n_outputs_]
-        else:    
-            self.layer_units = [n_features + hidden_layer_sizes[len(hidden_layer_sizes) - 1]] + hidden_layer_sizes + [self.n_outputs_]
-
-        # check random state
-        self._random_state = check_random_state(self.random_state)
-
-        if first_pass:
-            # First time training the model
-            self._initialize(y, self.layer_units, X.dtype)
-
-        # Initialize lists
-        activations = [X_]
-        for _ in range(len(self.layer_units) - 1):
-            activations.append([])
-            
-        deltas = []
-        for _ in range(len(activations) - 1):
-            tmp = []
-            for _  in range(X.shape[1]):
-                tmp.append([])      
-            deltas.append(tmp)
+# 
+#         if np.any(np.array(hidden_layer_sizes) <= 0):
+#             raise ValueError(
+#                 "hidden_layer_sizes must be > 0, got %s." % hidden_layer_sizes
+#             )
+#         first_pass = not hasattr(self, "coefs_") or (
+#             not self.warm_start 
+#         )
+# 
+#         n_features = X.shape[2]
+# 
+#         if self.n_outputs_ is None:
+#             if len(y.shape) < 3:
+#                 self.n_outputs_ = 1
+#             else:
+#                 self.n_outputs_ = y.shape[2]    
+# 
+#         if not self.mixed_mode:
+#             self.layer_units = [n_features] + hidden_layer_sizes + [self.n_outputs_]
+#         else:    
+#             self.layer_units = [n_features + hidden_layer_sizes[len(hidden_layer_sizes) - 1]] + hidden_layer_sizes + [self.n_outputs_]
+# 
+#         # check random state
+#         self._random_state = check_random_state(self.random_state)
+# 
+#         if first_pass:
+#             # First time training the model
+#             self._initialize(y, self.layer_units, X.dtype)
+# 
+#         # Initialize lists
+#         activations = [X_]
+#         for _ in range(len(self.layer_units) - 1):
+#             activations.append([])
+#             
+#         deltas = []
+#         for _ in range(len(activations) - 1):
+#             tmp = []
+#             for _  in range(X.shape[1]):
+#                 tmp.append([])      
+#             deltas.append(tmp)
         
         #####
-        N = self.coefs_[0].shape[0] * self.coefs_[0].shape[1]
-        N += self.coefs_[1].shape[0] * self.coefs_[1].shape[1]
-        N += self.intercepts_[0].shape[0] + self.intercepts_[1].shape[0]
-        
-        counter = 0
-        
-        print("N: ", N)
-
-        
-        def opt_func1(coefs_, grad = None):
-            nonlocal counter
-            nonlocal activations
-            nonlocal bias
-            nonlocal par_lr
-            nonlocal mask1
-            
-            #idx = np.random.randint(0,X_.shape[0],20)
-            
-            # Initialize lists
-            activations = [X_]
-            for _ in range(len(self.layer_units) - 1):
-                activations.append([])            
-
-            n = self.coefs_[0].shape[0] * self.coefs_[0].shape[1] 
-            self.coefs_[0] = coefs_[:n].reshape(self.coefs_[0].shape)
-            self.coefs_[1] = coefs_[n:n2].reshape(self.coefs_[1].shape)
-            self.intercepts_[0] = coefs_[n2:n2 + self.intercepts_[0].shape[0]]
-            self.intercepts_[1] = coefs_[n2 + self.intercepts_[0].shape[0]:]               
-            
-            activations_ = self._forward_pass(activations, bias = bias, par_lr = par_lr, predict_mask = mask1)
-            out = activations_[recurrent_hidden - 1]
-            self.loss = 'original_binary_log_loss'
-            
-            l =  LOSS_FUNCTIONS[self.loss](I.flatten(), out.flatten())
-            values = 0
-            for s in self.coefs_:
-                s = s.ravel()
-                values += np.dot(s, s)            
-            
-            l2 =(0.5 * float(1./100)) * values / activations[0].shape[0]
-            
-            
-            if counter % 1000 == 0:
-                encoded_classes = np.asarray(out.flatten() >= 0, dtype=int)
-                
-                print("Acc: ", accuracy_score(encoded_classes, I.flatten()))                   
-                
-                print(counter,l,l2,l + l2)
-            
-            counter += 1
-            return l + l2
-        
-        opt = nlopt.opt(nlopt.GN_ESCH, N)
-        opt.set_min_objective(opt_func1)
-        opt.set_xtol_rel(0.01)
-         
-        opt.set_lower_bounds(-100)
-        opt.set_upper_bounds(100)     
-        opt.set_maxeval(50000)   
-        
-        init_x = np.hstack([self.coefs_[0].flatten(),self.coefs_[1].flatten(),self.intercepts_[0].flatten(),self.intercepts_[1].flatten()]) 
-        n = self.coefs_[0].shape[0] * self.coefs_[0].shape[1] 
-        n2 = n + self.coefs_[1].shape[0] * self.coefs_[1].shape[1]
-        opt_coefs = opt.optimize(init_x)
-        
-        counter = 0 
-        opt = nlopt.opt(nlopt.LN_BOBYQA, N)
-        opt.set_min_objective(opt_func1)
-        opt.set_xtol_rel(0.01)
-         
-        opt.set_lower_bounds(-100)
-        opt.set_upper_bounds(100)       
-        opt_coefs = opt.optimize(opt_coefs)
+#         N = self.coefs_[0].shape[0] * self.coefs_[0].shape[1]
+#         N += self.coefs_[1].shape[0] * self.coefs_[1].shape[1]
+#         N += self.intercepts_[0].shape[0] + self.intercepts_[1].shape[0]
+#         
+#         counter = 0
+#         
+#         print("N: ", N)
+# 
+#         
+#         def opt_func1(coefs_, grad = None):
+#             nonlocal counter
+#             nonlocal activations
+#             nonlocal bias
+#             nonlocal par_lr
+#             nonlocal mask1
+#             
+#             #idx = np.random.randint(0,X_.shape[0],20)
+#             
+#             # Initialize lists
+#             activations = [X_]
+#             for _ in range(len(self.layer_units) - 1):
+#                 activations.append([])            
+# 
+#             n = self.coefs_[0].shape[0] * self.coefs_[0].shape[1] 
+#             self.coefs_[0] = coefs_[:n].reshape(self.coefs_[0].shape)
+#             self.coefs_[1] = coefs_[n:n2].reshape(self.coefs_[1].shape)
+#             self.intercepts_[0] = coefs_[n2:n2 + self.intercepts_[0].shape[0]]
+#             self.intercepts_[1] = coefs_[n2 + self.intercepts_[0].shape[0]:]               
+#             
+#             activations_ = self._forward_pass(activations, bias = bias, par_lr = par_lr, predict_mask = mask1)
+#             out = activations_[recurrent_hidden - 1]
+#             self.loss = 'original_binary_log_loss'
+#             
+#             l =  LOSS_FUNCTIONS[self.loss](I.flatten(), out.flatten())
+#             values = 0
+#             for s in self.coefs_:
+#                 s = s.ravel()
+#                 values += np.dot(s, s)            
+#             
+#             l2 =(0.5 * float(1./100)) * values / activations[0].shape[0]
+#             
+#             
+#             if counter % 1000 == 0:
+#                 encoded_classes = np.asarray(out.flatten() >= 0, dtype=int)
+#                 
+#                 print("Acc: ", accuracy_score(encoded_classes, I.flatten()))                   
+#                 
+#                 print(counter,l,l2,l + l2)
+#             
+#             counter += 1
+#             return l + l2
+#         
+#         opt = nlopt.opt(nlopt.GN_ESCH, N)
+#         opt.set_min_objective(opt_func1)
+#         opt.set_xtol_rel(0.01)
+#          
+#         opt.set_lower_bounds(-100)
+#         opt.set_upper_bounds(100)     
+#         opt.set_maxeval(50000)   
+#         
+#         init_x = np.hstack([self.coefs_[0].flatten(),self.coefs_[1].flatten(),self.intercepts_[0].flatten(),self.intercepts_[1].flatten()]) 
+#         n = self.coefs_[0].shape[0] * self.coefs_[0].shape[1] 
+#         n2 = n + self.coefs_[1].shape[0] * self.coefs_[1].shape[1]
+#         opt_coefs = opt.optimize(init_x)
+#         
+#         counter = 0 
+#         opt = nlopt.opt(nlopt.LN_BOBYQA, N)
+#         opt.set_min_objective(opt_func1)
+#         opt.set_xtol_rel(0.01)
+#          
+#         opt.set_lower_bounds(-100)
+#         opt.set_upper_bounds(100)       
+#         opt_coefs = opt.optimize(opt_coefs)
         
         
         #opt_coefs  = minimize(opt_func1,init_x, method = 'COBYLA')
         
-        self.coefs_[0] = opt_coefs[:n].reshape(self.coefs_[0].shape)
-        self.coefs_[1] = opt_coefs[n:n2].reshape(self.coefs_[1].shape)
-        self.intercepts_[0] = opt_coefs[n2:n2 + self.intercepts_[0].shape[0]]
-        self.intercepts_[1] = opt_coefs[n2 + self.intercepts_[0].shape[0]:]        
+#         self.coefs_[0] = opt_coefs[:n].reshape(self.coefs_[0].shape)
+#         self.coefs_[1] = opt_coefs[n:n2].reshape(self.coefs_[1].shape)
+#         self.intercepts_[0] = opt_coefs[n2:n2 + self.intercepts_[0].shape[0]]
+#         self.intercepts_[1] = opt_coefs[n2 + self.intercepts_[0].shape[0]:]        
+        
+        self.max_iter = 15
+        self.learning_rate_init=0.0001
+        self.alpha=1./100.
+        print ("Fit X->I:")
+
+        self._fit(X_, I, I, incremental=False, fit_mask = mask1, predict_mask = mask1)        
         
         self.mixed_mode = False
+        n_features = X.shape[2]
         
         if not  self.mixed_mode:
             self.layer_units = [n_features] + hidden_layer_sizes + [self.n_outputs_]
@@ -358,6 +366,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
             nonlocal mask1            
             
             n = self.coefs_[2].shape[0] * self.coefs_[2].shape[1] 
+            n2 = n + self.coefs_[3].shape[0] * self.coefs_[3].shape[1]  
             self.coefs_[2] = coefs_[:n].reshape(self.coefs_[2].shape)
             self.coefs_[3] = coefs_[n:].reshape(self.coefs_[3].shape)
             self.intercepts_[2] = coefs_[n2:n2 + self.intercepts_[2].shape[0]]
