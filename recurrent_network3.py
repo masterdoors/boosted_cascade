@@ -336,12 +336,34 @@ class BiasedRecurrentClassifier(MLPClassifier):
 #         self.intercepts_[0] = opt_coefs[n2:n2 + self.intercepts_[0].shape[0]]
 #         self.intercepts_[1] = opt_coefs[n2 + self.intercepts_[0].shape[0]:]        
         
-        self.max_iter = 15
+        self.max_iter = 150
         self.learning_rate_init=0.0001
         self.alpha=1./100.
         print ("Fit X->I:")
+        
+        X, X_val, y, y_val, I, I_val, bias,bias_val = train_test_split(
+                            X_,
+                            I,
+                            self.bias,
+                            random_state=self._random_state,
+                            test_size=0.1,
+                        )        
+        
 
-        self._fit(X_, I, I, incremental=False, fit_mask = mask1, predict_mask = mask1)        
+        self._fit(X_, I, I, incremental=False, fit_mask = mask1, predict_mask = mask1)  
+        
+        activations = [X_]
+        for _ in range(len(self.layer_units) - 1):
+            activations.append([])            
+ 
+        activations_ = self._forward_pass(activations, bias = bias, par_lr = par_lr, predict_mask = mask1)        
+        
+        out = activations_[recurrent_hidden - 1]
+         
+        diff = np.abs(I.flatten() -  out.flatten())
+        print("diff train: ", diff.min(), diff.max(), diff.mean())
+ 
+        self.warm_start = True   
         
         self.mixed_mode = False
         n_features = X.shape[2]
@@ -368,36 +390,47 @@ class BiasedRecurrentClassifier(MLPClassifier):
             n = self.coefs_[2].shape[0] * self.coefs_[2].shape[1] 
             n2 = n + self.coefs_[3].shape[0] * self.coefs_[3].shape[1]  
             self.coefs_[2] = coefs_[:n].reshape(self.coefs_[2].shape)
-            self.coefs_[3] = coefs_[n:].reshape(self.coefs_[3].shape)
+            self.coefs_[3] = coefs_[n:n2].reshape(self.coefs_[3].shape)
             self.intercepts_[2] = coefs_[n2:n2 + self.intercepts_[2].shape[0]]
             self.intercepts_[3] = coefs_[n2 + self.intercepts_[2].shape[0]:]   
             self.loss = 'binary_log_loss'           
             
             activations = self._forward_pass(activations, bias = bias, par_lr = par_lr)
-            out = activations[recurrent_hidden - 1]
+            out = activations[len(activations) - 1]
             
-            counter += 1               
-            l = LOSS_FUNCTIONS[self.loss](I.flatten(), out.flatten())
+           
+            l = LOSS_FUNCTIONS[self.loss](y.flatten(), out.flatten())
             
             if counter % 100 == 0:
+                encoded_classes = np.asarray(out.flatten() >= 0, dtype=int)
+                diff = np.abs(y.flatten() -  out.flatten())
+                print("diff: ", diff.min(), diff.max(), diff.mean())
+                print("Acc: ", accuracy_score(encoded_classes, y.flatten()))                   
                 print(counter,l) 
-                            
+            counter += 1                               
             return l
         
         N = self.coefs_[2].shape[0] * self.coefs_[2].shape[1]
         N += self.coefs_[3].shape[0] * self.coefs_[3].shape[1]        
-        
-        opt = nlopt.opt(nlopt.LN_COBYLA, N)
+        N += self.intercepts_[2].shape[0] + self.intercepts_[3].shape[0]
+         
+        counter = 0
+         
+        print("N: ", N)        
+        opt = nlopt.opt(nlopt.LN_BOBYQA, N)
         opt.set_min_objective(opt_func2)
         opt.set_xtol_rel(0.01)  
+        opt.set_maxeval(3000) 
+#         opt.set_lower_bounds(-10000.)
+#         opt.set_upper_bounds(10000.)           
         
-        init_x = np.hstack([self.coefs_[2].flatten(),self.coefs_[3].flatten()])       
+        init_x = np.hstack([self.coefs_[2].flatten(),self.coefs_[3].flatten(),self.intercepts_[2].flatten(),self.intercepts_[3].flatten()])       
         
         opt_coefs = opt.optimize(init_x)
         n = self.coefs_[2].shape[0] * self.coefs_[2].shape[1]     
         n2 = n + self.coefs_[3].shape[0] * self.coefs_[3].shape[1]    
         self.coefs_[2] = opt_coefs[:n].reshape(self.coefs_[2].shape)
-        self.coefs_[3] = opt_coefs[n:].reshape(self.coefs_[3].shape)   
+        self.coefs_[3] = opt_coefs[n:n2].reshape(self.coefs_[3].shape)   
         self.intercepts_[2] = opt_coefs[n2:n2 + self.intercepts_[2].shape[0]]
         self.intercepts_[3] = opt_coefs[n2 + self.intercepts_[2].shape[0]:]          
         
