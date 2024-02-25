@@ -30,6 +30,7 @@ import numpy as np
 from itertools import chain
 
 from sklearn.preprocessing import LabelBinarizer
+import matplotlib.pyplot as plt
 
 import nlopt
 
@@ -188,7 +189,8 @@ class BiasedRecurrentClassifier(MLPClassifier):
         return mixed_copy, np.swapaxes(np.asarray(hidden_grad),0,1) 
     
     
-    def mockup_fit(self,X,y,X_,I, bias = None, par_lr = 1.0, recurrent_hidden = 3):
+    def mockup_fit(self,X,y,X_,I, bias = None, par_lr = 1.0, recurrent_hidden = 3, imp_feature = None):
+        self.validation_fraction = 0.1
         mask1 = list(range(recurrent_hidden - 1))
         self._no_improvement_count = 0
         self.best_loss_ = np.inf
@@ -336,21 +338,44 @@ class BiasedRecurrentClassifier(MLPClassifier):
 #         self.intercepts_[0] = opt_coefs[n2:n2 + self.intercepts_[0].shape[0]]
 #         self.intercepts_[1] = opt_coefs[n2 + self.intercepts_[0].shape[0]:]        
         
-        self.max_iter = 150
+        self.max_iter = 1000
         self.learning_rate_init=0.0001
-        self.alpha=1./100.
+        self.alpha=1./10000
         print ("Fit X->I:")
         
-        X, X_val, y, y_val, I, I_val, bias,bias_val = train_test_split(
-                            X_,
-                            I,
-                            self.bias,
-                            random_state=self._random_state,
-                            test_size=0.1,
-                        )        
+#         X, X_val, y, y_val, I, I_val, bias,bias_val = train_test_split(
+#                             X_,
+#                             I,
+#                             self.bias,
+#                             random_state=self._random_state,
+#                             test_size=0.1,
+#                         )        
         
 
         self._fit(X_, I, I, incremental=False, fit_mask = mask1, predict_mask = mask1)  
+        
+        
+        if imp_feature:
+            for i in range(X_.shape[2]):
+                print(i,X_[:,:,i].max(),X_[:,:,i].min())
+                res = []
+                res2 = []
+                for x in np.arange(-3,3,0.1):
+                    x_ = np.concatenate([X_[:1,:,:-2],np.zeros((1,X_.shape[1],2))],axis=2)
+                    x_[0,0,i] = x
+                    activations = [x_]
+                    for _ in range(len(self.layer_units) - 1):
+                        activations.append([])                  
+                    activations_ = self._forward_pass(activations, bias = None, par_lr = par_lr, predict_mask = mask1)
+                    res.append(activations_[recurrent_hidden - 1][0,0,0])
+                    res2.append(activations_[recurrent_hidden - 1][0,0,1])
+                    
+                _, ax = plt.subplots()
+                
+                #print(res)
+                ax.plot(list(np.arange(-3,3,0.1)), res)
+                ax.plot(list(np.arange(-3,3,0.1)), res2)     
+                plt.savefig("network" + str(i)+ ".png")           
         
         activations = [X_]
         for _ in range(len(self.layer_units) - 1):
@@ -359,7 +384,10 @@ class BiasedRecurrentClassifier(MLPClassifier):
         activations_ = self._forward_pass(activations, bias = bias, par_lr = par_lr, predict_mask = mask1)        
         
         out = activations_[recurrent_hidden - 1]
-         
+        
+        
+        print("Out: ", out.min(), out.max())
+        print("Out: ", out) 
         diff = np.abs(I.flatten() -  out.flatten())
         print("diff train: ", diff.min(), diff.max(), diff.mean())
  
@@ -591,7 +619,17 @@ class BiasedRecurrentClassifier(MLPClassifier):
     def _score(self, X, y, bias):
         """Private score method without input validation"""
         # Input validation would remove feature names, so we disable it
-        return accuracy_score(y, self._predict(X, check_input=False, bias=bias))      
+        
+        activations = [X]
+        for _ in range(len(self.layer_units) - 1):
+            activations.append([])     
+            
+        mask1 = list(range(self.recurrent_hidden - 1))
+        
+        activations_ = self._forward_pass(activations, bias = bias, par_lr = self.par_lr, predict_mask = mask1)
+        out = activations_[self.recurrent_hidden - 1]               
+        
+        return LOSS_FUNCTIONS['binary_log_loss'](y.flatten(), out.flatten())      
     
     def _predict(self, X, check_input=True, bias = None):
         """Private predict method with optional input validation"""
@@ -875,7 +913,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
         early_stopping = self.early_stopping
         
         bias = self.bias
-        if early_stopping:
+        if True:#early_stopping:
             # don't stratify in multilabel classification
             should_stratify = is_classifier(self) and self.n_outputs_ == 1
             stratify = y if should_stratify else None
@@ -887,7 +925,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
                     self.bias,
                     random_state=self._random_state,
                     test_size=self.validation_fraction,
-                    stratify=stratify,
+                    stratify=None,
                 )
             else:
                 X, X_val, y, y_val, I, I_val = train_test_split(
@@ -896,7 +934,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
                     I,
                     random_state=self._random_state,
                     test_size=self.validation_fraction,
-                    stratify=stratify,
+                    stratify=None,
                 )                    
         else:
             X_val = None
@@ -983,7 +1021,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
                 self.t_ += n_samples
                 self.loss_curve_.append(self.loss_)
                 if self.verbose:
-                    print("Iteration %d, loss = %.8f" % (self.n_iter_, self.loss_),l1,l2)
+                    print("Iteration %d, loss = %.8f" % (self.n_iter_, self.loss_),l1,l2,"val loss: ",self._score(X_val, I_val, bias_val))
 
                 # update no_improvement_count based on training loss or
                 # validation score according to early_stopping

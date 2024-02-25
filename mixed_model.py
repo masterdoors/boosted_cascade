@@ -9,6 +9,9 @@ from sklearn.ensemble._forest import _generate_unsampled_indices, _get_n_samples
 from sklearn.metrics import accuracy_score
 from scipy.special import expit as logistic_sigmoid
 from scipy.special import xlogy
+from matplotlib import pyplot as plt
+
+from sklearn import tree
 
 def binary_log_loss(y_true, y_prob):
     """Compute binary logistic loss for classification.
@@ -70,11 +73,31 @@ class MixedModel:
                         n_samples_bootstrap,
                     )
             else:
-                indices = list(range(X.shape[0]))                    
+                indices = list(range(X.shape[0]))   
+                
+            leaves = {}
+            children_left = clf.tree_.children_left
+            children_right = clf.tree_.children_right            
+            
+            stack = [(0, 0)]  # start with the root node id (0) and its depth (0)
+            while len(stack) > 0:
+                # `pop` ensures each node is only visited once
+                node_id, depth = stack.pop()
+
+                # If the left and right child of a node is not the same we have a split
+                # node
+                is_split_node = children_left[node_id] != children_right[node_id]
+                # If a split node, append left and right children and depth to `stack`
+                # so we can loop through them
+                if is_split_node:
+                    stack.append((children_left[node_id], depth + 1))
+                    stack.append((children_right[node_id], depth + 1))
+                else:
+                    leaves[node_id] = len(leaves)                                  
         
-            I = np.zeros((X.shape[0], clf.tree_.node_count))
+            I = np.zeros((X.shape[0], len(leaves)))
             for j in indices:
-                I[j,idx[j,i]] = 1.0    
+                I[j,leaves[idx[j,i]]] = 1.0    
             Is.append(I)
         return np.hstack(Is)  
     
@@ -87,6 +110,15 @@ class MixedModel:
             self.forest.fit(
                             X.reshape(-1,X.shape[2]), y.reshape(-1,y.shape[2]) 
                             )
+            
+        
+        
+        for t in self.forest.estimators_:
+            tree.plot_tree(t)    
+            
+            plt.savefig("tree.png")   
+            
+        imp_feature =  np.argmax(self.forest.feature_importances_)  
                 
         #print("Forest train X: ",X[1,2,:20])
         #print("Importances: ", self.forest.feature_importances_)
@@ -97,14 +129,14 @@ class MixedModel:
         
         for i in range(self.max_iter):
             print ("Outer loop iter: ", i)
-            self.network.hidden_layer_sizes = (I.shape[1],) + (I.shape[1],) + (self.network.hidden_layer_sizes[2],)
+            self.network.hidden_layer_sizes = (I.shape[1],) + (self.network.hidden_layer_sizes[1],)
 #             mm, hidden_grad = self.network.dual_fit(X_, y_, X, I.reshape((y_.shape[0],y_.shape[1],-1)),
 #                                    bias = bias, par_lr = self.learning_rate,
 #                                    recurrent_hidden = 3)
             
             mm, hidden_grad = self.network.mockup_fit(X_, y_, X, I.reshape((y_.shape[0],y_.shape[1],-1)),
                                    bias = bias, par_lr = self.learning_rate,
-                                   recurrent_hidden = 3)            
+                                   recurrent_hidden = 2, imp_feature = imp_feature)            
             
             tmp = self.network
             self.network = mm
