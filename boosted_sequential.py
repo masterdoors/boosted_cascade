@@ -277,8 +277,8 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         )    
         
         network = BiasedRecurrentClassifier(alpha=1./10000.,
-                                  hidden_layer_sizes=(self.hidden_size,self.hidden_size),
-                                               activation=["logistic","identity","identity"],
+                                  hidden_layer_sizes=(self.hidden_size,self.hidden_size,self.hidden_size),
+                                               activation=["tanh","logistic","identity","identity"],
                                                verbose=True,
                                                 max_iter=3500,
                                                 learning_rate_init=0.00001, tol = 0.0001,

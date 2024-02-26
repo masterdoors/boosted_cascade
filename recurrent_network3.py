@@ -205,15 +205,10 @@ class BiasedRecurrentClassifier(MLPClassifier):
         else:
             self.n_outputs_ = y.shape[2]          
 
-        print ("Fit X->I:")
         self.mixed_mode = True
         
         ### copied from _fit
         # Make sure self.hidden_layer_sizes is a list
-        hidden_layer_sizes = self.hidden_layer_sizes
-        if not hasattr(hidden_layer_sizes, "__iter__"):
-            hidden_layer_sizes = [hidden_layer_sizes]
-        hidden_layer_sizes = list(hidden_layer_sizes)
 # 
 #         if np.any(np.array(hidden_layer_sizes) <= 0):
 #             raise ValueError(
@@ -338,58 +333,60 @@ class BiasedRecurrentClassifier(MLPClassifier):
 #         self.intercepts_[0] = opt_coefs[n2:n2 + self.intercepts_[0].shape[0]]
 #         self.intercepts_[1] = opt_coefs[n2 + self.intercepts_[0].shape[0]:]        
         
-        self.max_iter = 1000
+        self.max_iter = 3000
         self.learning_rate_init=0.0001
-        self.alpha=1./10000
+        self.alpha=1./10
         print ("Fit X->I:")
         
-#         X, X_val, y, y_val, I, I_val, bias,bias_val = train_test_split(
-#                             X_,
-#                             I,
-#                             self.bias,
-#                             random_state=self._random_state,
-#                             test_size=0.1,
-#                         )        
-        
-
         self._fit(X_, I, I, incremental=False, fit_mask = mask1, predict_mask = mask1)  
+        self.warm_start = True
         
-        
-        if imp_feature:
-            for i in range(X_.shape[2]):
-                print(i,X_[:,:,i].max(),X_[:,:,i].min())
-                res = []
-                res2 = []
-                for x in np.arange(-3,3,0.1):
-                    x_ = np.concatenate([X_[:1,:,:-2],np.zeros((1,X_.shape[1],2))],axis=2)
-                    x_[0,0,i] = x
-                    activations = [x_]
-                    for _ in range(len(self.layer_units) - 1):
-                        activations.append([])                  
-                    activations_ = self._forward_pass(activations, bias = None, par_lr = par_lr, predict_mask = mask1)
-                    res.append(activations_[recurrent_hidden - 1][0,0,0])
-                    res2.append(activations_[recurrent_hidden - 1][0,0,1])
-                    
-                _, ax = plt.subplots()
-                
-                #print(res)
-                ax.plot(list(np.arange(-3,3,0.1)), res)
-                ax.plot(list(np.arange(-3,3,0.1)), res2)     
-                plt.savefig("network" + str(i)+ ".png")           
-        
-        activations = [X_]
-        for _ in range(len(self.layer_units) - 1):
-            activations.append([])            
- 
-        activations_ = self._forward_pass(activations, bias = bias, par_lr = par_lr, predict_mask = mask1)        
-        
-        out = activations_[recurrent_hidden - 1]
-        
-        
-        print("Out: ", out.min(), out.max())
-        print("Out: ", out) 
-        diff = np.abs(I.flatten() -  out.flatten())
-        print("diff train: ", diff.min(), diff.max(), diff.mean())
+#         if imp_feature:
+#             i = 40
+#             print(i,X_[:,:,i].max(),X_[:,:,i].min())
+#             res = []
+#             res2 = []
+#             for x in np.arange(0,1.05,0.05):
+#                 x_ = np.concatenate([X_[:1,:,:-2],np.zeros((1,X_.shape[1],2))],axis=2)
+#                 x_[0,0,i] = x
+#                 x_[0,0,i + 1] = 1. - x
+#                 activations = [x_]
+#                 for _ in range(len(self.layer_units) - 1):
+#                     activations.append([])                  
+#                 activations_ = self._forward_pass(activations, bias = None, par_lr = par_lr, predict_mask = mask1)
+#                 
+#                 if i ==40 and np.abs(x  - 1.) < 0.01:
+#                     print("Syntetic input")
+#                     for i_,a in enumerate(activations_):
+#                         print(i_,a)                        
+#                     
+#                 res.append(activations_[recurrent_hidden - 1][0,0,0])
+#                 res2.append(activations_[recurrent_hidden - 1][0,0,1])
+#                     
+#             _, ax = plt.subplots()
+#             
+#             #print(res)
+#             ax.plot(list(np.arange(0,1.05,0.05)), res)
+#             ax.plot(list(np.arange(0,1.05,0.05)), res2)     
+#             plt.savefig("network" + str(i)+ ".png")           
+#         
+#         activations = [X_[:1]]
+#         for _ in range(len(self.layer_units) - 1):
+#             activations.append([])            
+#  
+#         activations_ = self._forward_pass(activations, bias = bias, par_lr = par_lr, predict_mask = mask1)  
+#         
+#         print("Real input:")
+#         for i_,a in enumerate(activations_):
+#             print(i_,a)
+#                              
+#         
+#         out = activations_[recurrent_hidden - 1]
+#         
+#         
+#         print("Out: ", out.min(), out.max())
+#         diff = np.abs(I.flatten() -  out.flatten())
+#         print("diff train: ", diff.min(), diff.max(), diff.mean())
  
         self.warm_start = True   
         
@@ -629,7 +626,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
         activations_ = self._forward_pass(activations, bias = bias, par_lr = self.par_lr, predict_mask = mask1)
         out = activations_[self.recurrent_hidden - 1]               
         
-        return LOSS_FUNCTIONS['binary_log_loss'](y.flatten(), out.flatten())      
+        return LOSS_FUNCTIONS['original_binary_log_loss'](y.flatten(), out.flatten())      
     
     def _predict(self, X, check_input=True, bias = None):
         """Private predict method with optional input validation"""
