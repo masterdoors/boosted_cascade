@@ -512,7 +512,7 @@ class CascadeSequentialClassifier(ClassifierMixin, BaseSequentialBoostingDummy):
         self,
         *,
         loss="log_loss",
-        learning_rate=0.5,
+        learning_rate=1.0,
         n_estimators=2,
         n_layers=3,
         subsample=1.0,

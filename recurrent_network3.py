@@ -334,8 +334,8 @@ class BiasedRecurrentClassifier(MLPClassifier):
 #         self.intercepts_[1] = opt_coefs[n2 + self.intercepts_[0].shape[0]:]        
         
         self.max_iter = 3000
-        self.learning_rate_init=0.0001
-        self.alpha=1./10
+        self.learning_rate_init=0.001
+        self.alpha=1./10000
         print ("Fit X->I:")
         
         self._fit(X_, I, I, incremental=False, fit_mask = mask1, predict_mask = mask1)  
@@ -393,10 +393,8 @@ class BiasedRecurrentClassifier(MLPClassifier):
         self.mixed_mode = False
         n_features = X.shape[2]
         
-        if not  self.mixed_mode:
-            self.layer_units = [n_features] + hidden_layer_sizes + [self.n_outputs_]
-        else:    
-            self.layer_units = [n_features + hidden_layer_sizes[len(hidden_layer_sizes) - 1]] + hidden_layer_sizes + [self.n_outputs_]
+
+        self.layer_units = [n_features] + list(self.hidden_layer_sizes) + [self.n_outputs_]
         
         
         activations = [X] + [None] * (len(self.layer_units) - 1)     
