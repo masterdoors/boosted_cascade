@@ -423,15 +423,21 @@ class BiasedRecurrentClassifier(MLPClassifier):
             
            
             l = LOSS_FUNCTIONS[self.loss](y.flatten(), out.flatten())
+            values = 0
+            for s in self.coefs_:
+                s = s.ravel()
+                values += np.dot(s, s)            
+             
+            l2 =(0.5 * float(1./10000)) * values / activations[0].shape[0]            
             
-            if counter % 100 == 0:
+            if counter % 1000 == 0:
                 encoded_classes = np.asarray(out.flatten() >= 0, dtype=int)
                 diff = np.abs(y.flatten() -  out.flatten())
                 print("diff: ", diff.min(), diff.max(), diff.mean())
                 print("Acc: ", accuracy_score(encoded_classes, y.flatten()))                   
-                print(counter,l) 
+                print(counter,l,l2) 
             counter += 1                               
-            return l
+            return l + l2
         
         N = self.coefs_[2].shape[0] * self.coefs_[2].shape[1]
         N += self.coefs_[3].shape[0] * self.coefs_[3].shape[1]        
@@ -681,7 +687,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
         if non_activations:
             return y_pred, activations[self.recurrent_hidden], non_activations[self.recurrent_hidden]
         else:     
-            return y_pred, activations[self.recurrent_hidden]  
+            return y_pred, activations  
         
     def _loss_grad_lbfgs(
         self, packed_coef_inter, X, y, I, activations, deltas, coef_grads, intercept_grads, fit_mask = None, predict_mask = None
@@ -1043,6 +1049,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
 
                     is_stopping = self._optimizer.trigger_stopping(msg, self.verbose)
                     if is_stopping:
+                        print("Iteration %d, loss = %.8f" % (self.n_iter_, self.loss_),l1,l2,"val loss: ",self._score(X_val, I_val, bias_val))
                         break
                     else:
                         self._no_improvement_count = 0

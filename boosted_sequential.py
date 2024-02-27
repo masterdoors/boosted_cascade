@@ -258,8 +258,8 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
             max_features=self.max_features,
             max_leaf_nodes=self.max_leaf_nodes,
             ccp_alpha=self.ccp_alpha,
-            n_estimators=1,
-            n_jobs=2
+            n_estimators=10,
+            n_jobs=10
         )  
         
         restimator = ExtraTreesRegressor(
@@ -272,14 +272,14 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
             max_features=self.max_features,
             max_leaf_nodes=self.max_leaf_nodes,
             ccp_alpha=self.ccp_alpha,
-            n_estimators=1,
-            n_jobs=2
+            n_estimators=10,
+            n_jobs=10
         )    
         
         network = BiasedRecurrentClassifier(alpha=1./10000.,
                                   hidden_layer_sizes=(self.hidden_size,self.hidden_size,self.hidden_size),
                                                activation=["tanh","logistic","identity","identity"],
-                                               verbose=True,
+                                               verbose=False,
                                                 max_iter=3500,
                                                 learning_rate_init=0.00001, tol = 0.0001,
                                                  n_iter_no_change = 1000, batch_size=6, epsilon=1e-7, early_stopping=False)    

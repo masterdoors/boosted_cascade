@@ -153,11 +153,20 @@ class MixedModel:
                                 
             print("Mixed loss: ", l)                    
             
-            r, _ = self.network.predict_proba(X_,  bias = bias, par_lr = self.learning_rate)
+            r, act = self.network.predict_proba(X_,  bias = bias, par_lr = self.learning_rate)
             encoded_classes = np.asarray(r.flatten() >= 0, dtype=int)
             
-            print("Mixed score 2: ", accuracy_score(encoded_classes, y_.flatten()))            
-            I = I.reshape((-1,I.shape[2])) 
+            print("Mixed score 2: ", accuracy_score(encoded_classes, y_.flatten()))
+            
+            float_formatter = "{:.3f}".format
+            np.set_printoptions(formatter={'float_kind':float_formatter})
+            
+            I = I.reshape((-1,I.shape[2]))
+            for j in range(encoded_classes.shape[0]):
+                if encoded_classes[j] != y_.flatten()[j]:
+                    print(encoded_classes[j], y_.flatten()[j])
+                    print(act[self.network.recurrent_hidden - 1].reshape(-1,self.network.hidden_layer_sizes[2])[j],I[j])            
+             
         self.network = mm
         return hidden_grad
         
@@ -176,7 +185,8 @@ class MixedModel:
             I = self.getIndicators(self.forest, X_aug, False, False)
             I_list.append(I)
             I = np.swapaxes(np.asarray(I_list),0,1)
-            res[:,:t+1], hidden[:,:t+1] = self.network.predict_proba(I,  bias = bias, par_lr = learning_rate)
+            res[:,:t+1], act = self.network.predict_proba(I,  bias = bias, par_lr = learning_rate)
+            hidden[:,:t+1] = act[self.network.recurrent_hidden]
 
         print("Mixed prediction result sample: ", res[0][:5]) 
         print("With bias: ", bias[0][1][:5])
