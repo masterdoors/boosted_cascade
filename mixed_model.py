@@ -13,6 +13,7 @@ from matplotlib import pyplot as plt
 
 from sklearn import tree
 
+
 def binary_log_loss(y_true, y_prob):
     """Compute binary logistic loss for classification.
 
@@ -145,9 +146,9 @@ class MixedModel:
             #print("I diff: ", np.bitwise_xor(I.flatten().astype(int),I_.flatten().astype(int)).sum(), " of ", I.flatten().shape[0])
             I = I_
             self.network = tmp
-            encoded_classes = np.asarray(y_pred.flatten() >= 0, dtype=int)
+            encoded_classes_ = np.asarray(y_pred.flatten() >= 0, dtype=int)
             
-            print("Mixed score: ", accuracy_score(encoded_classes, y_.flatten()))
+            print("Mixed score: ", accuracy_score(encoded_classes_, y_.flatten()))
                     
             l = binary_log_loss(y_.flatten(), y_pred.flatten())
                                 
@@ -162,10 +163,25 @@ class MixedModel:
             np.set_printoptions(formatter={'float_kind':float_formatter})
             
             I = I.reshape((-1,I.shape[2]))
-            for j in range(encoded_classes.shape[0]):
-                if encoded_classes[j] != y_.flatten()[j]:
-                    print(encoded_classes[j], y_.flatten()[j])
-                    print(act[self.network.recurrent_hidden - 1].reshape(-1,self.network.hidden_layer_sizes[2])[j],I[j])            
+            for k in range(y_.shape[0]):
+                has_ine = False
+                for j in range(k*y_.shape[1],(k +1)*y_.shape[1]):
+                    if encoded_classes[j] != encoded_classes_[j]:
+                        has_ine = True
+                        break
+                if has_ine:                        
+                    for j in range(k*y_.shape[1],(k +1)*y_.shape[1]):
+                        if encoded_classes[j] != encoded_classes_[j]:
+                            print("X mixed: ", X_[k,int(j % y_.shape[1])])
+                            print("X_nn: ", act[0][k,int(j % y_.shape[1])])
+                            print("Fail: ", int(j / y_.shape[1]),int(j % y_.shape[1]),encoded_classes[j], encoded_classes_[j])
+                            print(act[self.network.recurrent_hidden - 1].reshape(-1,self.network.hidden_layer_sizes[1])[j],I[j])
+                        else:
+                            print("X mixed: ", X_[k,int(j % y_.shape[1])])
+                            print("X_nn: ", act[0][k,int(j % y_.shape[1])])                            
+                            print("OK: ", int(j / y_.shape[1]),int(j % y_.shape[1]),encoded_classes[j], encoded_classes_[j])
+                            print(act[self.network.recurrent_hidden - 1].reshape(-1,self.network.hidden_layer_sizes[1])[j],I[j])
+                                    
              
         self.network = mm
         return hidden_grad

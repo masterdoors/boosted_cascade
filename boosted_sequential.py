@@ -258,8 +258,8 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
             max_features=self.max_features,
             max_leaf_nodes=self.max_leaf_nodes,
             ccp_alpha=self.ccp_alpha,
-            n_estimators=10,
-            n_jobs=10
+            n_estimators=1,
+            n_jobs=1
         )  
         
         restimator = ExtraTreesRegressor(
@@ -272,8 +272,8 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
             max_features=self.max_features,
             max_leaf_nodes=self.max_leaf_nodes,
             ccp_alpha=self.ccp_alpha,
-            n_estimators=10,
-            n_jobs=10
+            n_estimators=1,
+            n_jobs=1
         )    
         
         network = BiasedRecurrentClassifier(alpha=1./10000.,
@@ -559,7 +559,7 @@ class CascadeSequentialClassifier(ClassifierMixin, BaseSequentialBoostingDummy):
             ccp_alpha=ccp_alpha,
         )
         self.dummy_loss = False
-        self.hidden_size = 20
+        self.hidden_size = 2
         self.hidden_activation = 'identity'
 
     def _encode_y(self, y, sample_weight):
