@@ -188,6 +188,40 @@ class BiasedRecurrentClassifier(MLPClassifier):
 
         return mixed_copy, np.swapaxes(np.asarray(hidden_grad),0,1) 
     
+    def draw_plots(self,X_,j,par_lr,mask1, dir_):
+        for i in range(X_.shape[2]):
+            #i = 40
+            res = []
+            res2 = []
+            for x in np.arange(0,1.05,0.05):
+                if i == X_.shape[2] - 2:
+                    x_ = np.concatenate([X_[:1,:,:-2],np.zeros((1,X_.shape[1],2))],axis=2)
+                    x_[0,j,i] = x
+                    x_[0,j,i + 1] = 1. - x
+                if i == X_.shape[2] - 1:
+                    x_ = np.concatenate([X_[:1,:,:-2],np.zeros((1,X_.shape[1],2))],axis=2)
+                    x_[0,j,i] = 1. - x
+                    x_[0,j,i - 1] = x
+                    
+                if i < X_.shape[2] - 2:
+                    x_ = X_[:1,:,:]
+                    x_[0,j,i] = x        
+                    
+                activations = [x_]
+                for _ in range(len(self.layer_units) - 1):
+                    activations.append([])                  
+                activations_ = self._forward_pass(activations, bias = None, par_lr = par_lr, predict_mask = mask1)
+                 
+                res.append(activations_[self.recurrent_hidden - 1][0,j,0])
+                res2.append(activations_[self.recurrent_hidden - 1][0,j,1])
+                     
+            _, ax = plt.subplots()
+             
+            #print(res)
+            ax.plot(list(np.arange(0,1.05,0.05)), res)
+            ax.plot(list(np.arange(0,1.05,0.05)), res2)     
+            plt.savefig(dir_ + "/network" + str(i)+ ".png")           
+    
     
     def mockup_fit(self,X,y,X_,I, bias = None, par_lr = 1.0, recurrent_hidden = 3, imp_feature = None):
         self.validation_fraction = 0.1
@@ -563,7 +597,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
                 if i == 0 and not self.mixed_mode:
                     if t > 0:
                         #activations[i + 1][:,t] = safe_sparse_dot(np.hstack([activations[self.n_layers_ -  2][:,t - 1], activations[i][:,t]]), self.coefs_[i])
-                        activations[next_i][:,t] = safe_sparse_dot(np.hstack([activations[i + self.recurrent_hidden][:,t - 1], activations[i][:,t]]), self.coefs_[i])
+                        activations[next_i][:,t] = safe_sparse_dot(np.hstack([activations[self.recurrent_hidden][:,t - 1], activations[i][:,t]]), self.coefs_[i])
                     else:
                         #init_add = np.zeros((activations[i][:,t].shape[0],activations[self.n_layers_ - 2][:,t].shape[1])) 
                         init_add = np.zeros((activations[i][:,t].shape[0],activations[i + self.recurrent_hidden][:,t].shape[1]))
@@ -1058,6 +1092,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
                     break
 
                 if self.n_iter_ == self.max_iter:
+                    print("Iteration %d, loss = %.8f" % (self.n_iter_, self.loss_),l1,l2,"val loss: ",self._score(X_val, I_val, bias_val))                    
                     warnings.warn(
                         "Stochastic Optimizer: Maximum iterations (%d) "
                         "reached and the optimization hasn't converged yet."

@@ -13,6 +13,8 @@ from matplotlib import pyplot as plt
 
 from sklearn import tree
 
+import os
+
 
 def binary_log_loss(y_true, y_prob):
     """Compute binary logistic loss for classification.
@@ -172,14 +174,30 @@ class MixedModel:
                 if has_ine:                        
                     for j in range(k*y_.shape[1],(k +1)*y_.shape[1]):
                         if encoded_classes[j] != encoded_classes_[j]:
-                            print("X mixed: ", X_[k,int(j % y_.shape[1])])
-                            print("X_nn: ", act[0][k,int(j % y_.shape[1])])
-                            print("Fail: ", int(j / y_.shape[1]),int(j % y_.shape[1]),encoded_classes[j], encoded_classes_[j])
+                            print("Fail: ", "(", int(j / y_.shape[1]),int(j % y_.shape[1]), ")", encoded_classes[j], encoded_classes_[j])
+                            
+                            print("X mixed: ", X[k,int(j % y_.shape[1])])
+                            if int(j % y_.shape[1]) == 0:
+                                print("X_nn: ", np.zeros((self.network.hidden_layer_sizes[2],)),act[0][k,int(j % y_.shape[1])])
+                            else:    
+                                print("X_nn: ", act[self.network.recurrent_hidden][k,int(j % y_.shape[1]) - 1],act[0][k,int(j % y_.shape[1])])
                             print(act[self.network.recurrent_hidden - 1].reshape(-1,self.network.hidden_layer_sizes[1])[j],I[j])
+                            mask1 = list(range(self.network.recurrent_hidden - 1))
+                            
+                            dir_name = str(k) + "_" + str(int(j % y_.shape[1]))
+                            if not os.path.exists(dir_name):
+                                os.makedirs(dir_name)
+                            line = list(range(k*y_.shape[1],(k +1)*y_.shape[1]))
+                            self.network.draw_plots(X_.reshape(-1,X_.shape[2])[line].reshape((1,-1,X_.shape[2])),int(j % y_.shape[1]),self.learning_rate,mask1, dir_name)
                         else:
-                            print("X mixed: ", X_[k,int(j % y_.shape[1])])
-                            print("X_nn: ", act[0][k,int(j % y_.shape[1])])                            
-                            print("OK: ", int(j / y_.shape[1]),int(j % y_.shape[1]),encoded_classes[j], encoded_classes_[j])
+                            print("OK: ", "(" ,int(j / y_.shape[1]),int(j % y_.shape[1]),")",encoded_classes[j], encoded_classes_[j])
+                            
+                            print("X mixed: ", X[k,int(j % y_.shape[1])])
+                            if int(j % y_.shape[1]) == 0:
+                                print("X_nn: ", np.zeros((self.network.hidden_layer_sizes[2],)),act[0][k,int(j % y_.shape[1])])
+                            else:
+                                print("X_nn: ", act[self.network.recurrent_hidden][k,int(j % y_.shape[1]) - 1],act[0][k,int(j % y_.shape[1])])
+                                                                
                             print(act[self.network.recurrent_hidden - 1].reshape(-1,self.network.hidden_layer_sizes[1])[j],I[j])
                                     
              

@@ -78,7 +78,7 @@ def polyndrome(n):
 
 simple_rnn_data = []
 lstm_data = []
-str_len = 20# in [20, 40, 60, 80, 100]:
+str_len = 8# in [20, 40, 60, 80, 100]:
 #    for _ in range(5):
 grammar = UnmarkedReversalGrammar(2,str_len)
 remove_epsilon_rules(grammar)
@@ -89,7 +89,7 @@ sampler = LengthSampler(grammar)
 generator = random.Random()
 
 X = np.asarray([list(sampler.sample(str_len, generator))
-        for i in range(1000)])
+        for i in range(256)])
 #X = polyndrome(7)  
 
 
