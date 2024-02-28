@@ -409,6 +409,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                 raw_predictions_, history_sum_, grad  = kfold_estimator.fit(X_a.astype(float), X_aug.astype(float),
                                                                       residual[:,:,:, k], y,
                                                                        history_sum_copy[:,:,:,k],
+                                                                       i,
                                                                        sample_weight)
                 raw_predictions[:,:,k] += raw_predictions_.reshape(raw_predictions[:,:,k].shape)
                 history_sum[:,:,:,k] += history_sum_.reshape(history_sum[:,:,:,k].shape)

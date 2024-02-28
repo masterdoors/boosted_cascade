@@ -74,7 +74,7 @@ class KFoldWrapper(object):
         return self.estimators_
 
 
-    def fit(self, X_,X, y, y_,history_k,sample_weight=None):
+    def fit(self, X_,X, y, y_,history_k,depth,sample_weight=None):
         self.lr = []
         self.estimators_ = []
         n_samples = X.shape[0]
@@ -99,9 +99,9 @@ class KFoldWrapper(object):
         bias = history_k
         estimator = MixedModel(self.dummy_estimator_f, self.dummy_estimator_n, max_iter = 5,learning_rate = self.learning_rate)
         if sample_weight is not None:
-            hidden_grad += estimator.fit(X,y,X_,y_,bias,sample_weight)
+            hidden_grad += estimator.fit(X,y,X_,y_,bias,depth,sample_weight)
         else:
-            hidden_grad += estimator.fit(X,y,X_,y_,bias)     
+            hidden_grad += estimator.fit(X,y,X_,y_,bias,depth)     
         self.estimators_.append(estimator)
         out_, hidden_ = estimator.predict_proba(X_,bias=bias,learning_rate = self.learning_rate)
              

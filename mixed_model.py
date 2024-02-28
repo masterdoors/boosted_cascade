@@ -104,7 +104,7 @@ class MixedModel:
             Is.append(I)
         return np.hstack(Is)  
     
-    def fit(self,X,y,X_,y_,bias,sample_weight = None):
+    def fit(self,X,y,X_,y_,bias,depth,sample_weight = None):
         if sample_weight is not None:
             self.forest.fit(
                             X.reshape(-1,X.shape[2]), y.reshape(-1,y.shape[2]), sample_weight.flatten()
@@ -116,10 +116,7 @@ class MixedModel:
             
         
         
-        for t in self.forest.estimators_:
-            tree.plot_tree(t)    
-            
-            plt.savefig("tree.png")   
+
             
         imp_feature =  np.argmax(self.forest.feature_importances_)  
                 
@@ -184,11 +181,16 @@ class MixedModel:
                             print(act[self.network.recurrent_hidden - 1].reshape(-1,self.network.hidden_layer_sizes[1])[j],I[j])
                             mask1 = list(range(self.network.recurrent_hidden - 1))
                             
-                            dir_name = str(k) + "_" + str(int(j % y_.shape[1]))
+                            dir_name = str(k) + "_" + str(int(j % y_.shape[1])) + "_" + str(i) + "_" + str(depth)
                             if not os.path.exists(dir_name):
                                 os.makedirs(dir_name)
                             line = list(range(k*y_.shape[1],(k +1)*y_.shape[1]))
                             self.network.draw_plots(X_.reshape(-1,X_.shape[2])[line].reshape((1,-1,X_.shape[2])),int(j % y_.shape[1]),self.learning_rate,mask1, dir_name)
+                            
+                            for t in self.forest.estimators_:
+                                tree.plot_tree(t)    
+                                
+                                plt.savefig(dir_name + "/tree.png")                               
                         else:
                             print("OK: ", "(" ,int(j / y_.shape[1]),int(j % y_.shape[1]),")",encoded_classes[j], encoded_classes_[j])
                             

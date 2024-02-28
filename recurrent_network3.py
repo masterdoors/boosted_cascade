@@ -188,12 +188,12 @@ class BiasedRecurrentClassifier(MLPClassifier):
 
         return mixed_copy, np.swapaxes(np.asarray(hidden_grad),0,1) 
     
-    def draw_plots(self,X_,j,par_lr,mask1, dir_):
+    def draw_plots(self,X_,j,par_lr, mask1, dir_):
         for i in range(X_.shape[2]):
             #i = 40
             res = []
             res2 = []
-            for x in np.arange(0,1.05,0.05):
+            for x in np.arange(-10,10.05,0.05):
                 if i == X_.shape[2] - 2:
                     x_ = np.concatenate([X_[:1,:,:-2],np.zeros((1,X_.shape[1],2))],axis=2)
                     x_[0,j,i] = x
@@ -218,8 +218,8 @@ class BiasedRecurrentClassifier(MLPClassifier):
             _, ax = plt.subplots()
              
             #print(res)
-            ax.plot(list(np.arange(0,1.05,0.05)), res)
-            ax.plot(list(np.arange(0,1.05,0.05)), res2)     
+            ax.plot(list(np.arange(-10,10.05,0.05)), res)
+            ax.plot(list(np.arange(-10,10.05,0.05)), res2)     
             plt.savefig(dir_ + "/network" + str(i)+ ".png")           
     
     
