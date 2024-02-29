@@ -13,6 +13,8 @@ from matplotlib import pyplot as plt
 
 from sklearn import tree
 
+import pickle
+
 import os
 
 
@@ -168,7 +170,7 @@ class MixedModel:
                     if encoded_classes[j] != encoded_classes_[j]:
                         has_ine = True
                         break
-                if has_ine:                        
+                if has_ine and i == self.max_iter - 1:                        
                     for j in range(k*y_.shape[1],(k +1)*y_.shape[1]):
                         if encoded_classes[j] != encoded_classes_[j]:
                             print("Fail: ", "(", int(j / y_.shape[1]),int(j % y_.shape[1]), ")", encoded_classes[j], encoded_classes_[j])
@@ -185,12 +187,15 @@ class MixedModel:
                             if not os.path.exists(dir_name):
                                 os.makedirs(dir_name)
                             line = list(range(k*y_.shape[1],(k +1)*y_.shape[1]))
-                            self.network.draw_plots(X_.reshape(-1,X_.shape[2])[line].reshape((1,-1,X_.shape[2])),int(j % y_.shape[1]),self.learning_rate,mask1, dir_name)
+                            self.network.draw_plots(X.reshape(-1,X.shape[2])[line].reshape((1,-1,X.shape[2])),int(j % y_.shape[1]),self.learning_rate,mask1, dir_name)
                             
                             for t in self.forest.estimators_:
                                 tree.plot_tree(t)    
                                 
-                                plt.savefig(dir_name + "/tree.png")                               
+                                plt.savefig(dir_name + "/tree.png")     
+                                with open(dir_name + "/tree.pkl", 'wb') as fp:
+                                    pickle.dump(self.forest, fp)                                
+                                                          
                         else:
                             print("OK: ", "(" ,int(j / y_.shape[1]),int(j % y_.shape[1]),")",encoded_classes[j], encoded_classes_[j])
                             
