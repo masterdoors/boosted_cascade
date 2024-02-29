@@ -406,18 +406,18 @@ class BiasedRecurrentClassifier(MLPClassifier):
 #             ax.plot(list(np.arange(0,1.05,0.05)), res2)     
 #             plt.savefig("network" + str(i)+ ".png")           
 #         
-#         activations = [X_[:1]]
-#         for _ in range(len(self.layer_units) - 1):
-#             activations.append([])            
-#  
-#         activations_ = self._forward_pass(activations, bias = bias, par_lr = par_lr, predict_mask = mask1)  
-#         
-#         print("Real input:")
-#         for i_,a in enumerate(activations_):
-#             print(i_,a)
-#                              
-#         
-#         out = activations_[recurrent_hidden - 1]
+        activations = [X_]
+        for _ in range(len(self.layer_units) - 1):
+            activations.append([])            
+  
+        activations_ = self._forward_pass(activations, bias = bias, par_lr = par_lr, predict_mask = mask1)  
+         
+        out = activations_[recurrent_hidden - 1]
+        
+        encoded_classes = np.asarray(out.flatten() >= 0.5, dtype=int)
+                 
+        print("Acc I: ", accuracy_score(encoded_classes, I.flatten()))         
+        
 #         
 #         
 #         print("Out: ", out.min(), out.max())
