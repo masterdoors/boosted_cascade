@@ -379,7 +379,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
 #         self.intercepts_[0] = opt_coefs[n2:n2 + self.intercepts_[0].shape[0]]
 #         self.intercepts_[1] = opt_coefs[n2 + self.intercepts_[0].shape[0]:]        
         
-        self.max_iter = 40
+        self.max_iter = 200
         self.learning_rate_init=0.001
         self.alpha=1./ 100
         print ("Fit X->I:")
@@ -516,7 +516,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
         self.learning_rate_init=0.00001
         self.alpha=1./10000.
         self.warm_start = True
-        self.max_iter = 2000
+        self.max_iter = 3000
 
         self._no_improvement_count = 0        
         self.verbose = True
