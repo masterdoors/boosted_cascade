@@ -224,8 +224,18 @@ class BiasedRecurrentClassifier(MLPClassifier):
             ax.plot(list(np.arange(-10,10.05,0.05)), res2)     
             plt.savefig(dir_ + "/network" + str(i)+ ".png")           
     
+    def sampleXIdata(self,T,X,size):
+        rnd_part = np.random.random((size,X.shape[1],X.shape[2]))
+        min_ = X.reshape(-1,X.shape[2]).min(axis=0)
+        max_ = X.reshape(-1,X.shape[2]).max(axis=0)
+        diff = (max_ - min_) + 0.0001
+        X_ = rnd_part * diff + min_
+        I =  T.getIndicators(T.forest, X_.reshape(-1,X.shape[2]), False, False)
+        
+        return X_,I.reshape(X_.shape[0],X_.shape[1],I.shape[1])
     
-    def mockup_fit(self,X,y,X_,I, bias = None, par_lr = 1.0, recurrent_hidden = 3, imp_feature = None):
+    
+    def mockup_fit(self,X,y,X_,I, T, bias = None, par_lr = 1.0, recurrent_hidden = 3, imp_feature = None):
         self.validation_fraction = 0.1
         mask1 = list(range(recurrent_hidden - 1))
         self._no_improvement_count = 0
@@ -233,7 +243,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
         self.loss_curve_ = []        
         
         self.recurrent_hidden = recurrent_hidden
-        self.bias = bias
+
         self.par_lr = par_lr
         print ("Par lr: ", self.par_lr)
         if len(y.shape) < 3:
@@ -369,12 +379,14 @@ class BiasedRecurrentClassifier(MLPClassifier):
 #         self.intercepts_[0] = opt_coefs[n2:n2 + self.intercepts_[0].shape[0]]
 #         self.intercepts_[1] = opt_coefs[n2 + self.intercepts_[0].shape[0]:]        
         
-        self.max_iter = 10000
-        self.learning_rate_init=0.0001
-        self.alpha=1./10
+        self.max_iter = 40
+        self.learning_rate_init=0.001
+        self.alpha=1./ 100
         print ("Fit X->I:")
-        
-        self._fit(X_, I, I, incremental=False, fit_mask = mask1, predict_mask = mask1)  
+        self.bias = None
+        X_add, I_add = self.sampleXIdata(T,X_,30000)
+        self._fit(np.vstack([X_,X_add]), np.vstack([I,I_add]), np.vstack([I,I_add]), incremental=False, fit_mask = mask1, predict_mask = mask1)
+        self.bias = bias  
         self.warm_start = True
         
 #         if imp_feature:
@@ -430,74 +442,86 @@ class BiasedRecurrentClassifier(MLPClassifier):
         n_features = X.shape[2]
         
 
-        self.layer_units = [n_features] + list(self.hidden_layer_sizes) + [self.n_outputs_]
-        
-        
-        activations = [X] + [None] * (len(self.layer_units) - 1)     
-        
-        counter = 0   
-        
-        print("Fit I->W->Y: ")
+#         self.layer_units = [n_features] + list(self.hidden_layer_sizes) + [self.n_outputs_]
+#         
+#         
+#         activations = [X] + [None] * (len(self.layer_units) - 1)     
+#         
+#         counter = 0   
+#         
+#         print("Fit I->W->Y: ")
+# 
+#         def opt_func2(coefs_, grad):
+#             nonlocal counter
+#             nonlocal activations
+#             nonlocal bias
+#             nonlocal par_lr
+#             nonlocal mask1            
+#             
+#             n = self.coefs_[2].shape[0] * self.coefs_[2].shape[1] 
+#             n2 = n + self.coefs_[3].shape[0] * self.coefs_[3].shape[1]  
+#             self.coefs_[2] = coefs_[:n].reshape(self.coefs_[2].shape)
+#             self.coefs_[3] = coefs_[n:n2].reshape(self.coefs_[3].shape)
+#             self.intercepts_[2] = coefs_[n2:n2 + self.intercepts_[2].shape[0]]
+#             self.intercepts_[3] = coefs_[n2 + self.intercepts_[2].shape[0]:]   
+#             self.loss = 'binary_log_loss'           
+#             
+#             activations = self._forward_pass(activations, bias = bias, par_lr = par_lr)
+#             out = activations[len(activations) - 1]
+#             
+#            
+#             l = LOSS_FUNCTIONS[self.loss](y.flatten(), out.flatten())
+#             values = 0
+#             for s in self.coefs_:
+#                 s = s.ravel()
+#                 values += np.dot(s, s)            
+#              
+#             l2 =(0.5 * float(1./10000)) * values / activations[0].shape[0]            
+#             
+#             if counter % 1000 == 0:
+#                 encoded_classes = np.asarray(out.flatten() >= 0, dtype=int)
+#                 diff = np.abs(y.flatten() -  out.flatten())
+#                 print("diff: ", diff.min(), diff.max(), diff.mean())
+#                 print("Acc: ", accuracy_score(encoded_classes, y.flatten()))                   
+#                 print(counter,l,l2) 
+#             counter += 1                               
+#             return l + l2
+#         
+#         N = self.coefs_[2].shape[0] * self.coefs_[2].shape[1]
+#         N += self.coefs_[3].shape[0] * self.coefs_[3].shape[1]        
+#         N += self.intercepts_[2].shape[0] + self.intercepts_[3].shape[0]
+#          
+#         counter = 0
+#          
+#         print("N: ", N)        
+#         opt = nlopt.opt(nlopt.LN_COBYLA, N)
+#         opt.set_min_objective(opt_func2)
+#         opt.set_xtol_rel(0.001)  
+#         opt.set_maxeval(6000) 
+#         #opt.set_lower_bounds(-10000.)
+#         #opt.set_upper_bounds(10000.)           
+#         
+#         init_x = np.hstack([self.coefs_[2].flatten(),self.coefs_[3].flatten(),self.intercepts_[2].flatten(),self.intercepts_[3].flatten()])       
+#         
+#         opt_coefs = opt.optimize(init_x)
+#         n = self.coefs_[2].shape[0] * self.coefs_[2].shape[1]     
+#         n2 = n + self.coefs_[3].shape[0] * self.coefs_[3].shape[1]    
+#         self.coefs_[2] = opt_coefs[:n].reshape(self.coefs_[2].shape)
+#         self.coefs_[3] = opt_coefs[n:n2].reshape(self.coefs_[3].shape)   
+#         self.intercepts_[2] = opt_coefs[n2:n2 + self.intercepts_[2].shape[0]]
+#         self.intercepts_[3] = opt_coefs[n2 + self.intercepts_[2].shape[0]:]          
+        self.best_loss_ = np.inf
+        self.loss_curve_ = []
+        #X = X[:,:,20:]
+        self.learning_rate_init=0.00001
+        self.alpha=1./10000.
+        self.warm_start = True
+        self.max_iter = 2000
 
-        def opt_func2(coefs_, grad):
-            nonlocal counter
-            nonlocal activations
-            nonlocal bias
-            nonlocal par_lr
-            nonlocal mask1            
-            
-            n = self.coefs_[2].shape[0] * self.coefs_[2].shape[1] 
-            n2 = n + self.coefs_[3].shape[0] * self.coefs_[3].shape[1]  
-            self.coefs_[2] = coefs_[:n].reshape(self.coefs_[2].shape)
-            self.coefs_[3] = coefs_[n:n2].reshape(self.coefs_[3].shape)
-            self.intercepts_[2] = coefs_[n2:n2 + self.intercepts_[2].shape[0]]
-            self.intercepts_[3] = coefs_[n2 + self.intercepts_[2].shape[0]:]   
-            self.loss = 'binary_log_loss'           
-            
-            activations = self._forward_pass(activations, bias = bias, par_lr = par_lr)
-            out = activations[len(activations) - 1]
-            
-           
-            l = LOSS_FUNCTIONS[self.loss](y.flatten(), out.flatten())
-            values = 0
-            for s in self.coefs_:
-                s = s.ravel()
-                values += np.dot(s, s)            
-             
-            l2 =(0.5 * float(1./10000)) * values / activations[0].shape[0]            
-            
-            if counter % 1000 == 0:
-                encoded_classes = np.asarray(out.flatten() >= 0, dtype=int)
-                diff = np.abs(y.flatten() -  out.flatten())
-                print("diff: ", diff.min(), diff.max(), diff.mean())
-                print("Acc: ", accuracy_score(encoded_classes, y.flatten()))                   
-                print(counter,l,l2) 
-            counter += 1                               
-            return l + l2
-        
-        N = self.coefs_[2].shape[0] * self.coefs_[2].shape[1]
-        N += self.coefs_[3].shape[0] * self.coefs_[3].shape[1]        
-        N += self.intercepts_[2].shape[0] + self.intercepts_[3].shape[0]
-         
-        counter = 0
-         
-        print("N: ", N)        
-        opt = nlopt.opt(nlopt.LN_BOBYQA, N)
-        opt.set_min_objective(opt_func2)
-        opt.set_xtol_rel(0.01)  
-        opt.set_maxeval(3000) 
-#         opt.set_lower_bounds(-10000.)
-#         opt.set_upper_bounds(10000.)           
-        
-        init_x = np.hstack([self.coefs_[2].flatten(),self.coefs_[3].flatten(),self.intercepts_[2].flatten(),self.intercepts_[3].flatten()])       
-        
-        opt_coefs = opt.optimize(init_x)
-        n = self.coefs_[2].shape[0] * self.coefs_[2].shape[1]     
-        n2 = n + self.coefs_[3].shape[0] * self.coefs_[3].shape[1]    
-        self.coefs_[2] = opt_coefs[:n].reshape(self.coefs_[2].shape)
-        self.coefs_[3] = opt_coefs[n:n2].reshape(self.coefs_[3].shape)   
-        self.intercepts_[2] = opt_coefs[n2:n2 + self.intercepts_[2].shape[0]]
-        self.intercepts_[3] = opt_coefs[n2 + self.intercepts_[2].shape[0]:]          
+        self._no_improvement_count = 0        
+        self.verbose = True
+        self._fit(X, y, I,incremental=False, fit_mask = list(range(recurrent_hidden - 1, self.n_layers_ - 1)))
+        self.verbose = False
         
         self.bias = None
         
@@ -965,6 +989,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
                     stratify=None,
                 )
             else:
+                bias_val = None
                 X, X_val, y, y_val, I, I_val = train_test_split(
                     X,
                     y,
@@ -1006,15 +1031,18 @@ class BiasedRecurrentClassifier(MLPClassifier):
                 al2 = 0.0
                 bc = 0
                 for batch_slice in gen_batches(n_samples, batch_size):
+                    bias_batch = None
                     if self.shuffle:
                         X_batch = _safe_indexing(X, sample_idx[batch_slice])
                         y_batch = y[sample_idx[batch_slice]]
-                        bias_batch = bias[sample_idx[batch_slice]]
+                        if self.bias is not None:
+                            bias_batch = bias[sample_idx[batch_slice]]
                         I_batch = I[sample_idx[batch_slice]]
                     else:
                         X_batch = X[batch_slice]
                         y_batch = y[batch_slice]
-                        bias_batch = bias[batch_slice]
+                        if self.bias is not None:
+                            bias_batch = bias[batch_slice]
                         I_batch = I[batch_slice]
 
                     activations[0] = X_batch
@@ -1058,6 +1086,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
                 self.t_ += n_samples
                 self.loss_curve_.append(self.loss_)
                 if self.verbose:
+                    
                     print("Iteration %d, loss = %.8f" % (self.n_iter_, self.loss_),l1,l2,"val loss: ",self._score(X_val, I_val, bias_val))
 
                 # update no_improvement_count based on training loss or

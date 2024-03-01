@@ -258,8 +258,8 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
             max_features=self.max_features,
             max_leaf_nodes=self.max_leaf_nodes,
             ccp_alpha=self.ccp_alpha,
-            n_estimators=1,
-            n_jobs=1
+            n_estimators=10,
+            n_jobs=10
         )  
         
         restimator = ExtraTreesRegressor(
@@ -272,8 +272,8 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
             max_features=self.max_features,
             max_leaf_nodes=self.max_leaf_nodes,
             ccp_alpha=self.ccp_alpha,
-            n_estimators=1,
-            n_jobs=1
+            n_estimators=10,
+            n_jobs=10
         )    
         
         network = BiasedRecurrentClassifier(alpha=1./10000.,
@@ -281,8 +281,8 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                                                activation=["tanh","logistic","identity","identity"],
                                                verbose=False,
                                                 max_iter=3500,
-                                                learning_rate_init=0.00001, tol = 0.0001,
-                                                 n_iter_no_change = 10000, batch_size=6, epsilon=1e-7, early_stopping=False)    
+                                                learning_rate_init=0.00001, tol = 0.00001,
+                                                 n_iter_no_change = 100, batch_size=6, epsilon=1e-7, early_stopping=False)    
 
         # Need to pass a copy of raw_predictions to negative_gradient()
         # because raw_predictions is partially updated at the end of the loop
@@ -560,7 +560,7 @@ class CascadeSequentialClassifier(ClassifierMixin, BaseSequentialBoostingDummy):
             ccp_alpha=ccp_alpha,
         )
         self.dummy_loss = False
-        self.hidden_size = 2
+        self.hidden_size = 4
         self.hidden_activation = 'identity'
 
     def _encode_y(self, y, sample_weight):

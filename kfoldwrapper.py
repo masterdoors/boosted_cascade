@@ -97,7 +97,7 @@ class KFoldWrapper(object):
 #             hidden[test_index,:] += hidden_
 
         bias = history_k
-        estimator = MixedModel(self.dummy_estimator_f, self.dummy_estimator_n, max_iter = 5,learning_rate = self.learning_rate)
+        estimator = MixedModel(self.dummy_estimator_f, self.dummy_estimator_n, max_iter = 10,learning_rate = self.learning_rate)
         if sample_weight is not None:
             hidden_grad += estimator.fit(X,y,X_,y_,bias,depth,sample_weight)
         else:

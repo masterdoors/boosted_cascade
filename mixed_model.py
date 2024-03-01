@@ -136,7 +136,7 @@ class MixedModel:
 #                                    bias = bias, par_lr = self.learning_rate,
 #                                    recurrent_hidden = 3)
             
-            mm, hidden_grad = self.network.mockup_fit(X_, y_, X, I.reshape((y_.shape[0],y_.shape[1],-1)),
+            mm, hidden_grad = self.network.mockup_fit(X_, y_, X, I.reshape((y_.shape[0],y_.shape[1],-1)),self,
                                    bias = bias, par_lr = self.learning_rate,
                                    recurrent_hidden = 3, imp_feature = imp_feature)            
             
