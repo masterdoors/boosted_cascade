@@ -11,10 +11,11 @@ class TorchRNN(nn.Module):
         "relu": torch.relu,
         "softmax": torch.softmax,
     }
-    def __init__(self, layer_units, activations):
+    def __init__(self, layer_units, activations, recurrent_hidden):
         assert len(layer_units) == len(activations)
-        self.activations = activations
         super(TorchRNN, self).__init__()
+        self.activations = activations
+        self.recurrent_hidden = recurrent_hidden
         self.layers = []  
         for frm, too  in layer_units:
             self.layers.append(nn.Linear(frm, too))
@@ -25,8 +26,14 @@ class TorchRNN(nn.Module):
             res = TorchRNN.ACTIVATIONS[self.activations[i]](self.layers(res))
         return res 
     
-    def forward2(self, x, hidden_state):
-        pass
+    def forward2(self, x, hidden_state, predict_mask):
+        hidden = None
+        res = torch.cat((x, hidden_state), 1)
+        for i in predict_mask:
+            res = TorchRNN.ACTIVATIONS[self.activations[i]](self.layers(res)) 
+            if i == self.recurrent_hidden:
+                hidden = res
+        return res, hidden           
     
     def init_hidden(self):
         pass
