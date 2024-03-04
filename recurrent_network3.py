@@ -9,8 +9,7 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.neural_network._base import ACTIVATIONS, inplace_identity_derivative,inplace_tanh_derivative, inplace_logistic_derivative, inplace_relu_derivative    
 from sklearn.model_selection import train_test_split
 from sklearn.neural_network._stochastic_optimizers import AdamOptimizer, SGDOptimizer
-from sklearn.base import (
-    _fit_context, is_classifier)
+from sklearn.base import is_classifier
 
 from scipy.special import expit as logistic_sigmoid
 from scipy.special import xlogy
@@ -36,11 +35,9 @@ import nlopt
 
 from scipy.optimize import  minimize
 
-
 def _pack(coefs_, intercepts_):
     """Pack the parameters into a single vector."""
     return np.hstack([l.ravel() for l in coefs_ + intercepts_])
-
 
 def inplace_softmax_derivative(Z, delta):
     sm_ = np.zeros(Z.shape + (Z.shape[1],))
@@ -63,6 +60,13 @@ DERIVATIVES = {
 }
 
 _STOCHASTIC_SOLVERS = ["sgd", "adam"]
+
+def printf(*args):
+    with open("printf.txt","a") as f:
+        for a in args:
+            f.write(str(a) + " ")
+        f.write("\n") 
+    print(args)    
 
 def obinary_log_loss(y_true, y_prob):
 
@@ -116,7 +120,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
         self.layer_units = [c for i,c in enumerate(self.layer_units) if i not in mask]
         
     def _initialize(self, y, layer_units, dtype):
-        print("RNN Init has been called...")
+        printf("RNN Init has been called...")
         # set all attributes, allocate weights etc. for first call
         # Initialize parameters
         self.n_iter_ = 0
@@ -159,13 +163,13 @@ class BiasedRecurrentClassifier(MLPClassifier):
         self.recurrent_hidden = recurrent_hidden
         self.bias = bias
         self.par_lr = par_lr        
-        print ("Par lr: ", self.par_lr)        
+        printf ("Par lr: ", self.par_lr)        
         if len(y.shape) < 3:
             self.n_outputs_ = 1
         else:
             self.n_outputs_ = y.shape[2]            
         
-        print("Fit I->W->Y: ")
+        printf("Fit I->W->Y: ")
         self.best_loss_ = np.inf
         self.loss_curve_ = []
         self._fit(X, y, I, incremental=False, fit_mask = None) #list(range(recurrent_hidden - 1, self.n_layers_ - 1)))
@@ -245,7 +249,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
         self.recurrent_hidden = recurrent_hidden
 
         self.par_lr = par_lr
-        print ("Par lr: ", self.par_lr)
+        printf ("Par lr: ", self.par_lr)
         if len(y.shape) < 3:
             self.n_outputs_ = 1
         else:
@@ -373,74 +377,21 @@ class BiasedRecurrentClassifier(MLPClassifier):
         
         
         #opt_coefs  = minimize(opt_func1,init_x, method = 'COBYLA')
-        
-#         self.coefs_[0] = opt_coefs[:n].reshape(self.coefs_[0].shape)
-#         self.coefs_[1] = opt_coefs[n:n2].reshape(self.coefs_[1].shape)
-#         self.intercepts_[0] = opt_coefs[n2:n2 + self.intercepts_[0].shape[0]]
-#         self.intercepts_[1] = opt_coefs[n2 + self.intercepts_[0].shape[0]:]        
-        
+
         self.max_iter = 200
         self.learning_rate_init=0.001
         self.alpha=1./ 100
-        print ("Fit X->I:")
+        printf ("Fit X->I:")
         self.bias = None
         X_add, I_add = self.sampleXIdata(T,X_,30000)
         self._fit(np.vstack([X_,X_add]), np.vstack([I,I_add]), np.vstack([I,I_add]), incremental=False, fit_mask = mask1, predict_mask = mask1)
         self.bias = bias  
         self.warm_start = True
-        
-#         if imp_feature:
-#             i = 40
-#             print(i,X_[:,:,i].max(),X_[:,:,i].min())
-#             res = []
-#             res2 = []
-#             for x in np.arange(0,1.05,0.05):
-#                 x_ = np.concatenate([X_[:1,:,:-2],np.zeros((1,X_.shape[1],2))],axis=2)
-#                 x_[0,0,i] = x
-#                 x_[0,0,i + 1] = 1. - x
-#                 activations = [x_]
-#                 for _ in range(len(self.layer_units) - 1):
-#                     activations.append([])                  
-#                 activations_ = self._forward_pass(activations, bias = None, par_lr = par_lr, predict_mask = mask1)
-#                 
-#                 if i ==40 and np.abs(x  - 1.) < 0.01:
-#                     print("Syntetic input")
-#                     for i_,a in enumerate(activations_):
-#                         print(i_,a)                        
-#                     
-#                 res.append(activations_[recurrent_hidden - 1][0,0,0])
-#                 res2.append(activations_[recurrent_hidden - 1][0,0,1])
-#                     
-#             _, ax = plt.subplots()
-#             
-#             #print(res)
-#             ax.plot(list(np.arange(0,1.05,0.05)), res)
-#             ax.plot(list(np.arange(0,1.05,0.05)), res2)     
-#             plt.savefig("network" + str(i)+ ".png")           
-#         
-#         activations = [X_[:1]]
-#         for _ in range(len(self.layer_units) - 1):
-#             activations.append([])            
-#  
-#         activations_ = self._forward_pass(activations, bias = bias, par_lr = par_lr, predict_mask = mask1)  
-#         
-#         print("Real input:")
-#         for i_,a in enumerate(activations_):
-#             print(i_,a)
-#                              
-#         
-#         out = activations_[recurrent_hidden - 1]
-#         
-#         
-#         print("Out: ", out.min(), out.max())
-#         diff = np.abs(I.flatten() -  out.flatten())
-#         print("diff train: ", diff.min(), diff.max(), diff.mean())
- 
+
         self.warm_start = True   
         
         self.mixed_mode = False
         n_features = X.shape[2]
-        
 
 #         self.layer_units = [n_features] + list(self.hidden_layer_sizes) + [self.n_outputs_]
 #         
@@ -1087,7 +1038,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
                 self.loss_curve_.append(self.loss_)
                 if self.verbose:
                     
-                    print("Iteration %d, loss = %.8f" % (self.n_iter_, self.loss_),l1,l2,"val loss: ",self._score(X_val, I_val, bias_val))
+                    printf("Iteration %d, loss = %.8f" % (self.n_iter_, self.loss_),l1,l2,"val loss: ",self._score(X_val, I_val, bias_val))
 
                 # update no_improvement_count based on training loss or
                 # validation score according to early_stopping
@@ -1114,7 +1065,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
 
                     is_stopping = self._optimizer.trigger_stopping(msg, self.verbose)
                     if is_stopping:
-                        print("Iteration %d, loss = %.8f" % (self.n_iter_, self.loss_),l1,l2,"val loss: ",self._score(X_val, I_val, bias_val))
+                        printf("Iteration %d, loss = %.8f" % (self.n_iter_, self.loss_),l1,l2,"val loss: ",self._score(X_val, I_val, bias_val))
                         break
                     else:
                         self._no_improvement_count = 0
@@ -1123,7 +1074,7 @@ class BiasedRecurrentClassifier(MLPClassifier):
                     break
 
                 if self.n_iter_ == self.max_iter:
-                    print("Iteration %d, loss = %.8f" % (self.n_iter_, self.loss_),l1,l2,"val loss: ",self._score(X_val, I_val, bias_val))                    
+                    printf("Iteration %d, loss = %.8f" % (self.n_iter_, self.loss_),l1,l2,"val loss: ",self._score(X_val, I_val, bias_val))                    
                     warnings.warn(
                         "Stochastic Optimizer: Maximum iterations (%d) "
                         "reached and the optimization hasn't converged yet."

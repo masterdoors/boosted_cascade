@@ -67,7 +67,14 @@ def kfoldfitter(eid,kfold_estimator,X_aug,residual,y, raw_predictions,raw_predic
 
 def inversed_tanh(x):
     return 0.5 * np.log((1. + x)/(1. - x))
-    
+
+def printf(*args):
+    with open("printf.txt","a") as f:
+        for a in args:
+            f.write(str(a) + " ")
+        f.write("\n") 
+    print(args)
+
 class BaseSequentialBoostingDummy(BaseBoostedCascade):
     def _fit_stages(
         self,
@@ -131,6 +138,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         #non_activated = inversed_tanh(history_sum) 
 
         for i in range(begin_at_stage, self.n_layers):
+            printf("Global step: ", i)
             # subsampling
             if do_oob:
                 sample_mask = _random_sample_mask(n_samples, n_inbag, random_state)
@@ -186,8 +194,8 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                 else:  
                     K = self._loss.n_classes    
                     encoded_classes = np.argmax(raw_predictions.reshape(X.shape[0],X.shape[1], K), axis=2)
-                print("Acc: ",accuracy_score(encoded_classes.flatten(),y.flatten())) 
-                print("Cross-entropy: ", ce_score(raw_predictions, y))
+                printf("Acc: ",accuracy_score(encoded_classes.flatten(),y.flatten())) 
+                printf("Cross-entropy: ", ce_score(raw_predictions, y))
 
             if monitor is not None:
                 if monitor(i, self, locals()):
@@ -201,7 +209,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                 next_ = next(y_val_pred_iter)
                 validation_loss = loss_(y_val, next_, sample_weight_val)
                 encoded_classes = np.argmax(next_, axis=1)
-                print("val loss: ", validation_loss, "val_acc: ", accuracy_score(encoded_classes,y_val))
+                printf("val loss: ", validation_loss, "val_acc: ", accuracy_score(encoded_classes,y_val))
 
                 # Require validation_score to be better (less) than at least
                 # one of the last n_iter_no_change evaluations
@@ -282,22 +290,13 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                                                verbose=False,
                                                 max_iter=3500,
                                                 learning_rate_init=0.00001, tol = 0.00001,
-                                                 n_iter_no_change = 100, batch_size=6, epsilon=1e-7, early_stopping=False)    
+                                                 n_iter_no_change = 300, batch_size=6, epsilon=1e-7, early_stopping=False)    
 
         # Need to pass a copy of raw_predictions to negative_gradient()
         # because raw_predictions is partially updated at the end of the loop
         # in update_terminal_regions(), and gradients need to be evaluated at
         # iteration i - 1.
 
-#         binner_ = Binner(
-#             n_bins=self.n_bins,
-#             bin_subsample=self.bin_subsample,
-#             bin_type=self.bin_type,
-#             random_state=self.random_state,
-#         )  
-#         
-#         self.binners.append(binner_)      
-        
         #binned_history = history_sum#self._bin_data(binner_, history_sum.reshape(X.shape[0],-1), is_training_data=True).reshape(history_sum.shape)       
         
         if loss.n_classes == 2:
@@ -478,19 +477,7 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
                 else:
                     aug = np.hstack(aug_part)
                     X_a[:,t] = hstack([csr_matrix(aug), X[:,t]])                
-                
-#                 if t > 0:
-#                     aug_part = [binned_history[:,t - 1,:,k].reshape(-1,self.hidden_size)] + aug_part 
-#                 else:
-#                     aug_part = [np.zeros(binned_history[:,t,:,k].shape).reshape(-1,self.hidden_size)] + aug_part
-#                                            
-#                 if isinstance(X,np.ndarray):
-#                     X_aug[:,t] = np.hstack(aug_part + [X[:,t]])
-#                 else:
-#                     aug = np.hstack(aug_part)
-#                     X_aug[:,t] = hstack([csr_matrix(aug), X[:,t]])                    
-                    
-                        
+
             for _,estimator in enumerate(self.estimators_[i,k]):                            
                 r, h = estimator.predict(X_a,history_copy[:,:,:,k])
                 history[:,:,:,k] += h.reshape(history[:,:,:,k].shape)        
@@ -499,9 +486,9 @@ class BaseSequentialBoostingDummy(BaseBoostedCascade):
         #raw_predictions[:,:,:] = np.clip(raw_predictions,-2.99,2.99)  
         #print("hidden_sum test:", i, history[0,0,:,0][:4])      
         print("Dist test:", np.linalg.norm(history_copy.flatten()-history.flatten()))     
-        
+
                 
-        
+
 class CascadeSequentialClassifier(ClassifierMixin, BaseSequentialBoostingDummy):
     _parameter_constraints: dict = {
         **BaseBoostedCascade._parameter_constraints,
@@ -560,7 +547,7 @@ class CascadeSequentialClassifier(ClassifierMixin, BaseSequentialBoostingDummy):
             ccp_alpha=ccp_alpha,
         )
         self.dummy_loss = False
-        self.hidden_size = 4
+        self.hidden_size = 20
         self.hidden_activation = 'identity'
 
     def _encode_y(self, y, sample_weight):
@@ -838,6 +825,5 @@ class CascadeSequentialClassifier(ClassifierMixin, BaseSequentialBoostingDummy):
                 self.oob_score_ = self.oob_scores_[-1]
         self.n_estimators_ = n_stages
         return self            
-           
-                          
 
+                          

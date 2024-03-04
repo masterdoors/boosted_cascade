@@ -17,6 +17,12 @@ import pickle
 
 import os
 
+def printf(*args):
+    with open("printf.txt","a") as f:
+        for a in args:
+            f.write(str(a) + " ")
+        f.write("\n") 
+    print(args)
 
 def binary_log_loss(y_true, y_prob):
     """Compute binary logistic loss for classification.
@@ -130,7 +136,7 @@ class MixedModel:
         #np.save("I.npy", I)   
         
         for i in range(self.max_iter):
-            print ("Outer loop iter: ", i)
+            printf ("Outer loop iter: ", i)
             self.network.hidden_layer_sizes = (I.shape[1],) + (I.shape[1],) + (self.network.hidden_layer_sizes[2],)
 #             mm, hidden_grad = self.network.dual_fit(X_, y_, X, I.reshape((y_.shape[0],y_.shape[1],-1)),
 #                                    bias = bias, par_lr = self.learning_rate,
@@ -149,16 +155,16 @@ class MixedModel:
             self.network = tmp
             encoded_classes_ = np.asarray(y_pred.flatten() >= 0, dtype=int)
             
-            print("Mixed score: ", accuracy_score(encoded_classes_, y_.flatten()))
+            printf("Mixed score: ", accuracy_score(encoded_classes_, y_.flatten()))
                     
             l = binary_log_loss(y_.flatten(), y_pred.flatten())
                                 
-            print("Mixed loss: ", l)                    
+            printf("Mixed loss: ", l)                    
             
             r, act = self.network.predict_proba(X_,  bias = bias, par_lr = self.learning_rate)
             encoded_classes = np.asarray(r.flatten() >= 0, dtype=int)
             
-            print("Mixed score 2: ", accuracy_score(encoded_classes, y_.flatten()))
+            printf("Mixed score 2: ", accuracy_score(encoded_classes, y_.flatten()))
             
             float_formatter = "{:.3f}".format
             np.set_printoptions(formatter={'float_kind':float_formatter})
@@ -173,39 +179,39 @@ class MixedModel:
                 if has_ine and i == self.max_iter - 1:                        
                     for j in range(k*y_.shape[1],(k +1)*y_.shape[1]):
                         if encoded_classes[j] != encoded_classes_[j]:
-                            print("Fail: ", "(", int(j / y_.shape[1]),int(j % y_.shape[1]), ")", encoded_classes[j], encoded_classes_[j])
+                            printf("Fail: ", "(", int(j / y_.shape[1]),int(j % y_.shape[1]), ")", encoded_classes[j], encoded_classes_[j])
                             
-                            print("X mixed: ", X[k,int(j % y_.shape[1])])
+                            printf("X mixed: ", X[k,int(j % y_.shape[1])])
                             if int(j % y_.shape[1]) == 0:
-                                print("X_nn: ", np.zeros((self.network.hidden_layer_sizes[2],)),act[0][k,int(j % y_.shape[1])])
+                                printf("X_nn: ", np.zeros((self.network.hidden_layer_sizes[2],)),act[0][k,int(j % y_.shape[1])])
                             else:    
-                                print("X_nn: ", act[self.network.recurrent_hidden][k,int(j % y_.shape[1]) - 1],act[0][k,int(j % y_.shape[1])])
-                            print(act[self.network.recurrent_hidden - 1].reshape(-1,self.network.hidden_layer_sizes[1])[j],I[j])
+                                printf("X_nn: ", act[self.network.recurrent_hidden][k,int(j % y_.shape[1]) - 1],act[0][k,int(j % y_.shape[1])])
+                            printf(act[self.network.recurrent_hidden - 1].reshape(-1,self.network.hidden_layer_sizes[1])[j],I[j])
                             mask1 = list(range(self.network.recurrent_hidden - 1))
                             
                             dir_name = str(k) + "_" + str(int(j % y_.shape[1])) + "_" + str(i) + "_" + str(depth)
-                            if not os.path.exists(dir_name):
-                                os.makedirs(dir_name)
+                            #if not os.path.exists(dir_name):
+                            #    os.makedirs(dir_name)
                             line = list(range(k*y_.shape[1],(k +1)*y_.shape[1]))
-                            self.network.draw_plots(X.reshape(-1,X.shape[2])[line].reshape((1,-1,X.shape[2])),int(j % y_.shape[1]),self.learning_rate,mask1, dir_name)
+                            #self.network.draw_plots(X.reshape(-1,X.shape[2])[line].reshape((1,-1,X.shape[2])),int(j % y_.shape[1]),self.learning_rate,mask1, dir_name)
                             
-                            for t in self.forest.estimators_:
-                                tree.plot_tree(t)    
+                            #for t in self.forest.estimators_:
+                            #    tree.plot_tree(t)    
                                 
-                                plt.savefig(dir_name + "/tree.png")     
-                                with open(dir_name + "/tree.pkl", 'wb') as fp:
-                                    pickle.dump(self.forest, fp)                                
+                            #    plt.savefig(dir_name + "/tree.png")     
+                            #    with open(dir_name + "/tree.pkl", 'wb') as fp:
+                            #        pickle.dump(self.forest, fp)                                
                                                           
                         else:
-                            print("OK: ", "(" ,int(j / y_.shape[1]),int(j % y_.shape[1]),")",encoded_classes[j], encoded_classes_[j])
+                            printf("OK: ", "(" ,int(j / y_.shape[1]),int(j % y_.shape[1]),")",encoded_classes[j], encoded_classes_[j])
                             
-                            print("X mixed: ", X[k,int(j % y_.shape[1])])
+                            printf("X mixed: ", X[k,int(j % y_.shape[1])])
                             if int(j % y_.shape[1]) == 0:
-                                print("X_nn: ", np.zeros((self.network.hidden_layer_sizes[2],)),act[0][k,int(j % y_.shape[1])])
+                                printf("X_nn: ", np.zeros((self.network.hidden_layer_sizes[2],)),act[0][k,int(j % y_.shape[1])])
                             else:
-                                print("X_nn: ", act[self.network.recurrent_hidden][k,int(j % y_.shape[1]) - 1],act[0][k,int(j % y_.shape[1])])
+                                printf("X_nn: ", act[self.network.recurrent_hidden][k,int(j % y_.shape[1]) - 1],act[0][k,int(j % y_.shape[1])])
                                                                 
-                            print(act[self.network.recurrent_hidden - 1].reshape(-1,self.network.hidden_layer_sizes[1])[j],I[j])
+                            printf(act[self.network.recurrent_hidden - 1].reshape(-1,self.network.hidden_layer_sizes[1])[j],I[j])
                                     
              
         self.network = mm
@@ -229,12 +235,11 @@ class MixedModel:
             res[:,:t+1], act = self.network.predict_proba(I,  bias = bias, par_lr = learning_rate)
             hidden[:,:t+1] = act[self.network.recurrent_hidden]
 
-        print("Mixed prediction result sample: ", res[0][:5]) 
-        print("With bias: ", bias[0][1][:5])
-        print("With X_augs: ", X_aug[0])
+        printf("Mixed prediction result sample: ", res[0][:5]) 
+        printf("With bias: ", bias[0][1][:5])
+        printf("With X_augs: ", X_aug[0])
         
         if returnI:
             return res, hidden, I, np.swapaxes(np.asarray(X_augs),0,1)
         else:    
             return res, hidden    
-        
