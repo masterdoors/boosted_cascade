@@ -20,15 +20,14 @@ class TorchRNN(nn.Module):
         for frm, too  in layer_units:
             self.layers.append(nn.Linear(frm, too))
 
-    def forward(self, x, predict_mask):
-        res = x
-        for i in predict_mask:
-            res = TorchRNN.ACTIVATIONS[self.activations[i]](self.layers(res))
-        return res 
-    
-    def forward2(self, x, hidden_state, predict_mask):
+  
+    def forward(self, x, hidden_state, predict_mask):
         hidden = None
-        res = torch.cat((x, hidden_state), 1)
+        if hidden_state:
+            res = torch.cat((hidden_state,x), 1)
+        else:
+            res = x
+                
         for i in predict_mask:
             res = TorchRNN.ACTIVATIONS[self.activations[i]](self.layers(res)) 
             if i == self.recurrent_hidden:
@@ -36,8 +35,7 @@ class TorchRNN(nn.Module):
         return res, hidden           
     
     def init_hidden(self):
-        pass
-        #    return nn.init.kaiming_uniform_(torch.empty(1, self.hidden_size))
+        return nn.init.kaiming_uniform_(torch.empty(1, self.hidden_size))
     
     
     
@@ -105,21 +103,40 @@ class BiasedRecurrentClassifier:
         
         if self.model is None:
             self.model = TorchRNN(self.layer_units, self.activation)
+            
+        self.learning_rate_init = 0.001    
         X_add, I_add = self.sampleXIdata(T,X_,self.tree_approx_data_size)    
-        self._fit(np.vstack([X_,X_add]), np.vstack([I,I_add]), np.vstack([I,I_add]), incremental=False, fit_mask = mask1, predict_mask = mask1)    
+        self._fit(np.vstack([X_,X_add]), np.vstack([I,I_add]), incremental=False, fit_mask = mask1, predict_mask = mask1)  
+        
+        
+        self.layer_units = [n_features] + self.hidden_layer_sizes + [self.n_outputs_]
+        self.learning_rate_init = 0.0001
+        self._fit(X, y, incremental=False, fit_mask = list(range(recurrent_hidden - 1, self.n_layers_ - 1)))
+        #TODO get deltas
+          
 
                 
-    def _fit(self,X,y,fit_mask = None, predict_mask = None):                  
+    def _fit(self,X,y,fit_mask = None, predict_mask = None):   
+        for i,param in self.model.parameters():
+            if i not in fit_mask:
+                param.requires_grad = False
+            else:        
+                param.requires_grad = True
+                       
         criterion = nn.CrossEntropyLoss()
         optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate_init)
         
         for epoch in range(self.max_iter):
             np.random.shuffle(X)
-            for i, (name, label) in enumerate(X):
+            for i in range(int(X.shape[0] / self.batch_size)):
+                batch_idxs = np.random.randint(0,X.shape[0],self.batch_size)
+                X_batch =  X[batch_idxs]
+                y_batch = y[batch_idxs]
+                
                 hidden_state = self.model.init_hidden()
-                for char in name:
-                    output, hidden_state = self.model(char, hidden_state)
-                loss = criterion(output, label)
+                
+                output, hidden_state = self.model(X_batch, hidden_state, predict_mask)
+                loss = criterion(output, y_batch)
         
                 optimizer.zero_grad()
                 loss.backward()
