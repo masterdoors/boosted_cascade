@@ -187,12 +187,12 @@ class MixedModel:
                             else:    
                                 printf("X_nn: ", act[self.network.recurrent_hidden][k,int(j % y_.shape[1]) - 1],act[0][k,int(j % y_.shape[1])])
                             printf(act[self.network.recurrent_hidden - 1].reshape(-1,self.network.hidden_layer_sizes[1])[j],I[j])
-                            mask1 = list(range(self.network.recurrent_hidden - 1))
+                            #mask1 = list(range(self.network.recurrent_hidden - 1))
                             
-                            dir_name = str(k) + "_" + str(int(j % y_.shape[1])) + "_" + str(i) + "_" + str(depth)
+                            #dir_name = str(k) + "_" + str(int(j % y_.shape[1])) + "_" + str(i) + "_" + str(depth)
                             #if not os.path.exists(dir_name):
                             #    os.makedirs(dir_name)
-                            line = list(range(k*y_.shape[1],(k +1)*y_.shape[1]))
+                            #line = list(range(k*y_.shape[1],(k +1)*y_.shape[1]))
                             #self.network.draw_plots(X.reshape(-1,X.shape[2])[line].reshape((1,-1,X.shape[2])),int(j % y_.shape[1]),self.learning_rate,mask1, dir_name)
                             
                             #for t in self.forest.estimators_:

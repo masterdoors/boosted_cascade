@@ -37,7 +37,7 @@ from sklearn.decomposition import TruncatedSVD
 import matplotlib.pyplot as plt
 import matplotlib
 
-from recurrent_network3 import BiasedRecurrentClassifier
+from torch_recurrent_network import BiasedRecurrentClassifier
 
 from sklearn._loss.loss import (
     _LOSSES,
@@ -547,7 +547,7 @@ class CascadeSequentialClassifier(ClassifierMixin, BaseSequentialBoostingDummy):
             ccp_alpha=ccp_alpha,
         )
         self.dummy_loss = False
-        self.hidden_size = 20
+        self.hidden_size = 4
         self.hidden_activation = 'identity'
 
     def _encode_y(self, y, sample_weight):
