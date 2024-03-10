@@ -82,3 +82,15 @@ Global step:  0
 Outer loop iter:  0 
 Global step:  0 
 Outer loop iter:  0 
+Global step:  0 
+Outer loop iter:  0 
+Global step:  0 
+Outer loop iter:  0 
+Global step:  0 
+Outer loop iter:  0 
+Global step:  0 
+Outer loop iter:  0 
+Global step:  0 
+Outer loop iter:  0 
+Global step:  0 
+Outer loop iter:  0 

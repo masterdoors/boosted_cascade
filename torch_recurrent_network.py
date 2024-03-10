@@ -61,7 +61,7 @@ class TorchRNN(nn.Module):
                 
         for i in predict_mask:
             res = TorchRNN.ACTIVATIONS[self.activations[i]](self.layers[i](res)) 
-            if i == self.recurrent_hidden:
+            if i == self.recurrent_hidden - 1:
                 res = par_lr * res + bias
             hidden.append(res)
         return res, hidden           
@@ -157,7 +157,8 @@ class BiasedRecurrentClassifier:
             self.model = TorchRNN(self.layer_units, self.activation, recurrent_hidden = recurrent_hidden)
             
         self.learning_rate_init = 0.1  
-        self.alpha = 0.00001  
+        self.alpha = 0.0000  
+        self.max_iter = 10
         X_add, I_add = self.sampleXIdata(T,X_,self.tree_approx_data_size)    
         criterion = nn.BCELoss()
         self.mixed_mode = True
@@ -166,9 +167,10 @@ class BiasedRecurrentClassifier:
         self.alpha = 0.0001 
         #self.layer_units = [n_features] + list(self.hidden_layer_sizes) + [self.n_outputs_]
         self.learning_rate_init = 0.0001
+        self.max_iter = 10
         criterion = nn.BCEWithLogitsLoss()
         self.mixed_mode = False
-        self._fit(torch.from_numpy(X), torch.from_numpy(y), criterion, fit_mask = list(range(recurrent_hidden - 1, self.n_layers_ - 1)),bias = bias, par_lr = par_lr)
+        self._fit(torch.from_numpy(X), torch.from_numpy(y), criterion, fit_mask = list(range(recurrent_hidden - 1, self.n_layers - 1)),bias = bias, par_lr = par_lr)
         
         deltas = []
         for _ in range(len(self.layer_units)):
