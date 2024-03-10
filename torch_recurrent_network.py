@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
+from sklearn.metrics import accuracy_score
 import numpy as np
 import copy
 
@@ -38,18 +39,19 @@ class TorchRNN(nn.Module):
     
     
     def __init__(self, layer_units, activations, recurrent_hidden):
-        assert len(layer_units) == len(activations)
+        assert len(layer_units) == len(activations) + 1
         super(TorchRNN, self).__init__()
         self.activations = activations
         self.recurrent_hidden = recurrent_hidden
-        self.layers = []  
-        for frm, too  in layer_units:
+        self.layers = nn.ModuleList([])  
+        self.layer_units = layer_units
+        for frm, too  in zip(layer_units[:-1],layer_units[1:]):
             self.layers.append(nn.Linear(frm, too))
 
   
     def forward(self, x, hidden_state, predict_mask, bias,par_lr):
         hidden = []
-        if hidden_state:
+        if hidden_state is not None:
             res = torch.cat((hidden_state,x), 1)
         else:
             res = x
@@ -58,14 +60,14 @@ class TorchRNN(nn.Module):
             predict_mask = list(range(len(self.layers)))    
                 
         for i in predict_mask:
-            res = TorchRNN.ACTIVATIONS[self.activations[i]](self.layers(res)) 
+            res = TorchRNN.ACTIVATIONS[self.activations[i]](self.layers[i](res)) 
             if i == self.recurrent_hidden:
                 res = par_lr * res + bias
             hidden.append(res)
         return res, hidden           
     
-    def init_hidden(self):
-        return nn.init.kaiming_uniform_(torch.empty(1, self.hidden_size))
+    def init_hidden(self, batch):
+        return nn.init.kaiming_uniform_(torch.empty(batch, self.layer_units[self.recurrent_hidden]))
     
     
 class BiasedRecurrentClassifier:
@@ -96,11 +98,16 @@ class BiasedRecurrentClassifier:
         max_fun=15000,
     ):
         self.hidden_layer_sizes = hidden_layer_sizes
+        torch.set_default_dtype(torch.double)
         self.activation = activation  
         self.verbose = verbose 
         self.tol = tol 
         self.max_fun = max_fun
-        self.batch_size = batch_size
+        if batch_size == 'auto':
+            batch_size = 10
+        else:    
+            self.batch_size = batch_size
+            
         self.learning_rate_init = learning_rate_init
         self.alpha = alpha
         self.max_iter = max_iter
@@ -108,6 +115,7 @@ class BiasedRecurrentClassifier:
         self.model = None
         self.tree_approx_data_size = 30000
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.mixed_mode = False
         
     def _prune(self, mask = []):
         mask = set(mask)
@@ -142,21 +150,24 @@ class BiasedRecurrentClassifier:
         else:    
             self.n_outputs_ = y.shape[2]
             
-        self.layer_units = [n_features + self.hidden_layer_sizes[len(self.hidden_layer_sizes) - 1]] + self.hidden_layer_sizes + [self.n_outputs_]
+        self.layer_units = [n_features + self.hidden_layer_sizes[len(self.hidden_layer_sizes) - 1]] + list(self.hidden_layer_sizes) + [self.n_outputs_]
         self.n_layers = len(self.layer_units)  
         
         if self.model is None:
-            self.model = TorchRNN(self.layer_units, self.activation)
+            self.model = TorchRNN(self.layer_units, self.activation, recurrent_hidden = recurrent_hidden)
             
-        self.learning_rate_init = 0.001    
+        self.learning_rate_init = 0.1  
+        self.alpha = 0.00001  
         X_add, I_add = self.sampleXIdata(T,X_,self.tree_approx_data_size)    
         criterion = nn.BCELoss()
+        self.mixed_mode = True
         self._fit(torch.from_numpy(np.vstack([X_,X_add])), torch.from_numpy(np.vstack([I,I_add])), criterion, fit_mask = mask1, predict_mask = mask1)  
         
-        
-        self.layer_units = [n_features] + self.hidden_layer_sizes + [self.n_outputs_]
+        self.alpha = 0.0001 
+        #self.layer_units = [n_features] + list(self.hidden_layer_sizes) + [self.n_outputs_]
         self.learning_rate_init = 0.0001
         criterion = nn.BCEWithLogitsLoss()
+        self.mixed_mode = False
         self._fit(torch.from_numpy(X), torch.from_numpy(y), criterion, fit_mask = list(range(recurrent_hidden - 1, self.n_layers_ - 1)),bias = bias, par_lr = par_lr)
         
         deltas = []
@@ -207,7 +218,7 @@ class BiasedRecurrentClassifier:
 
                 
     def _fit(self,X,y,criterion,fit_mask = None, predict_mask = None, bias = None, par_lr = 1.):   
-        for i,param in self.model.parameters():
+        for i,param in enumerate(self.model.parameters()):
             if i not in fit_mask:
                 param.requires_grad = False
             else:        
@@ -216,7 +227,9 @@ class BiasedRecurrentClassifier:
         optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate_init, weight_decay=self.alpha)
 
         for epoch in range(self.max_iter):
-            np.random.shuffle(X)
+            #np.random.shuffle(X)
+            eloss = 0.
+            eacc = 0.
             for i in range(int(X.shape[0] / self.batch_size)):
                 batch_idxs = np.random.randint(0,X.shape[0],self.batch_size)
                 X_batch =  X[batch_idxs]
@@ -225,25 +238,37 @@ class BiasedRecurrentClassifier:
                 if bias is not None:
                     bias_batch = torch.from_numpy(bias[batch_idxs])
                 else:
-                    bias_batch = None     
-                
-                hidden_state = self.model.init_hidden()
+                    bias_batch = None
+                         
                 output = []
-                for t in range(X.shape[1]):
-                    out, hidden = self.model(X_batch[:,t], hidden_state, predict_mask,bias_batch,par_lr)
-                    hidden_state = hidden[self.model.recurrent_hidden]
-                    output.append(out)
-                loss = criterion(np.hstack(output), y_batch)
-        
+                if self.mixed_mode:
+                    for t in range(X.shape[1]):
+                        out, _ = self.model(X_batch[:,t], None, predict_mask,bias_batch,par_lr)
+                        output.append(out)                    
+                else:      
+                    hidden_state = self.model.init_hidden(self.batch_size)
+                    
+                    for t in range(X.shape[1]):
+                        out, hidden = self.model(X_batch[:,t], hidden_state, predict_mask,bias_batch,par_lr)
+                        hidden_state = hidden[self.model.recurrent_hidden]
+                        output.append(out)
+            
+                loss = criterion(torch.hstack(output).flatten(), y_batch.flatten())
+                eloss += loss.item()
+                encoded_classes_ = np.asarray(torch.hstack(output).flatten().detach().numpy() >= 0.5, dtype=int)
+                acc = accuracy_score(encoded_classes_,y_batch.flatten().detach().numpy())  
+                eacc += acc              
                 optimizer.zero_grad()
                 loss.backward()
                 nn.utils.clip_grad_norm_(self.model.parameters(), 1)
                 optimizer.step()
                 
             if self.verbose:
+
                 print(
                     f"Epoch [{epoch + 1}/{self.max_iter}], "
-                    f"Loss: {loss.item():.4f}"
+                    f"Loss: {eloss / int(X.shape[0] / self.batch_size):.4f}",
+                    eacc / int(X.shape[0] / self.batch_size)
                 )          
     
     def predict_proba(self, X, check_input=True, get_non_activated = False, bias=None,par_lr = 1.0):
@@ -254,13 +279,13 @@ class BiasedRecurrentClassifier:
             if bias is not None:
                 bias = torch.from_numpy(bias)     
             for t in range(X.shape[1]):
-                if self.mixed_model:
+                if self.mixed_mode:
                     out, hidden = self.model(X[:,t], None, bias[:,t], par_lr)
                 else:    
                     out, hidden = self.model(X[:,t], hidden_state, bias[:,t], par_lr)
                     hidden_state = hidden[self.model.recurrent_hidden]
                 output.append(out)
                 activations.append(hidden.numpy())
-        return np.hstack(output), activations        
+        return np.hstack(output).reshape(X.shape[0],X.shape[1]), activations        
                 
                 
