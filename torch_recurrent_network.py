@@ -30,7 +30,6 @@ DERIVATIVES = {
 
 class TorchRNN(nn.Module):
     ACTIVATIONS = {
-        "identity": torch.nn.Identity,
         "tanh": torch.tanh,
         "logistic": torch.sigmoid,
         "relu": torch.relu,
@@ -60,7 +59,10 @@ class TorchRNN(nn.Module):
             predict_mask = list(range(len(self.layers)))    
                 
         for i in predict_mask:
-            res = TorchRNN.ACTIVATIONS[self.activations[i]](self.layers[i](res)) 
+            if self.activations[i] in TorchRNN.ACTIVATIONS: 
+                res = TorchRNN.ACTIVATIONS[self.activations[i]](self.layers[i](res))
+            else:
+                res = self.layers[i](res)     
             if i == self.recurrent_hidden - 1:
                 res = par_lr * res + bias
             hidden.append(res)
@@ -126,10 +128,10 @@ class BiasedRecurrentClassifier:
         self.layer_units = [c for i,c in enumerate(self.layer_units) if i not in mask]   
           
     
-    def get_coefs_(self,i):
+    def coefs_(self,i):
         return self.model.layers[i].weight.numpy()   
     
-    coefs_ = property(fget = get_coefs_)
+    
         
     def sampleXIdata(self,T,X,size):
         rnd_part = np.random.random((size,X.shape[1],X.shape[2]))
@@ -155,9 +157,10 @@ class BiasedRecurrentClassifier:
         
         if self.model is None:
             self.model = TorchRNN(self.layer_units, self.activation, recurrent_hidden = recurrent_hidden)
+ 
             
         self.learning_rate_init = 0.1  
-        self.alpha = 0.0000  
+        self.alpha = 0.01  
         self.max_iter = 10
         X_add, I_add = self.sampleXIdata(T,X_,self.tree_approx_data_size)    
         criterion = nn.BCELoss()
@@ -179,14 +182,23 @@ class BiasedRecurrentClassifier:
                 tmp.append([])
             deltas.append(tmp)          
         
-        
-        hidden_state = self.model.init_hidden()
+        bias,par_lr
+        hidden_state = self.model.init_hidden(X.shape[0])
                 
         activations = [X]
-        for t in range(X.shape[1]):
-            out, hidden = self.model(X[:,t], hidden_state)
-            hidden_state = hidden[self.model.recurrent_hidden]
-            activations.append(hidden.numpy())
+        for _ in range(len(self.layer_units) - 1):
+            activations.append([])          
+        
+        with torch.no_grad():
+            for t in range(X.shape[1]):
+                _, hidden = self.model(torch.from_numpy(X[:,t]), hidden_state, None,bias=torch.from_numpy(bias[:,t]),par_lr=par_lr)
+                hidden_state = hidden[self.model.recurrent_hidden - 1]
+                
+                for i,h in enumerate(hidden):
+                    activations[i + 1].append([h.numpy() ])
+                    
+        for i in range(1,len(activations)):
+            activations[i] = np.swapaxes(np.asarray(activations[i]),0,1)            
 
         last = len(activations) - 2
 
@@ -200,15 +212,15 @@ class BiasedRecurrentClassifier:
     
     
             # Iterate over the hidden layers
-            for i in range(last - 1,-1,-1):
+            for i in range(last,0,-1):
 
                 inplace_derivative = DERIVATIVES[self.activation[i - 1]]
                 #if i == self.n_layers_ -  2 and t < X.shape[1] - 1:
-                if i == self.recurrent_hidden and t < X.shape[1] - 1:
-                    deltas[i - 1][t] = safe_sparse_dot(deltas[i][t], self.coefs_[i].T)
-                    deltas[i - 1][t] += safe_sparse_dot(deltas[0][t + 1],self.coefs_[0][:deltas[i][t].shape[1],:].T)
+                if i == recurrent_hidden and t < X.shape[1] - 1:
+                    deltas[i - 1][t] = safe_sparse_dot(deltas[i][t], self.coefs_(i).T)
+                    deltas[i - 1][t] += safe_sparse_dot(deltas[0][t + 1],self.coefs_(0)[:deltas[i][t].shape[1],:].T)
                 else:    
-                    deltas[i - 1][t] = safe_sparse_dot(deltas[i][t], self.coefs_[i].T)
+                    deltas[i - 1][t] = safe_sparse_dot(deltas[i][t], self.coefs_(i).T)
                 inplace_derivative(activations[i][:,t], deltas[i - 1][t])   
                 
         mixed_copy = copy.deepcopy(self)
@@ -245,14 +257,23 @@ class BiasedRecurrentClassifier:
                 output = []
                 if self.mixed_mode:
                     for t in range(X.shape[1]):
-                        out, _ = self.model(X_batch[:,t], None, predict_mask,bias_batch,par_lr)
+                        if bias_batch is not None:
+                            bb = bias_batch[:,t]
+                        else:
+                            bb = None    
+                        out, _ = self.model(X_batch[:,t], None, predict_mask,bb,par_lr)
                         output.append(out)                    
                 else:      
                     hidden_state = self.model.init_hidden(self.batch_size)
                     
                     for t in range(X.shape[1]):
-                        out, hidden = self.model(X_batch[:,t], hidden_state, predict_mask,bias_batch,par_lr)
-                        hidden_state = hidden[self.model.recurrent_hidden]
+                        if bias_batch is not None:
+                            bb = bias_batch[:,t]
+                        else:
+                            bb = None  
+                                                    
+                        out, hidden = self.model(X_batch[:,t], hidden_state, predict_mask,bb,par_lr)
+                        hidden_state = hidden[self.model.recurrent_hidden - 1]
                         output.append(out)
             
                 loss = criterion(torch.hstack(output).flatten(), y_batch.flatten())
@@ -278,6 +299,9 @@ class BiasedRecurrentClassifier:
             hidden_state = self.model.init_hidden()
             output = []
             activations = [X]
+            for _ in range(len(self.layer_units) - 1):
+                activations.append([])               
+            
             if bias is not None:
                 bias = torch.from_numpy(bias)     
             for t in range(X.shape[1]):
@@ -285,9 +309,13 @@ class BiasedRecurrentClassifier:
                     out, hidden = self.model(X[:,t], None, bias[:,t], par_lr)
                 else:    
                     out, hidden = self.model(X[:,t], hidden_state, bias[:,t], par_lr)
-                    hidden_state = hidden[self.model.recurrent_hidden]
+                    hidden_state = hidden[self.model.recurrent_hidden - 1]
                 output.append(out)
-                activations.append(hidden.numpy())
-        return np.hstack(output).reshape(X.shape[0],X.shape[1]), activations        
+                for i,h in enumerate(hidden):
+                    activations[i + 1].append([h.numpy() ])
+                    
+        for i in range(1,len(activations)):
+            activations[i] = np.swapaxes(np.asarray(activations[i]),0,1)   
+        return np.hstack(output.detach()).reshape(X.shape[0],X.shape[1]), activations        
                 
                 
