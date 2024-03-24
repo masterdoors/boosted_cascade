@@ -123,10 +123,10 @@ class BiasedRecurrentClassifier:
         
     def _prune(self, mask = []):
         mask = set(mask)
-        self.n_layers_ -= len(mask)
+        self.n_layers -= len(mask)
         self.model.recurrent_hidden -= len(mask)  
-        self.model.layers = [c for i,c in enumerate(self.model.layers) if i not in mask]
-        self.model.activation = [c for i,c in enumerate(self.model.activation) if i not in mask]
+        self.model.layers = nn.ModuleList([c for i,c in enumerate(self.model.layers) if i not in mask])
+        self.model.activations = [c for i,c in enumerate(self.model.activations) if i not in mask]
         self.layer_units = [c for i,c in enumerate(self.layer_units) if i not in mask]   
           
     
@@ -160,9 +160,9 @@ class BiasedRecurrentClassifier:
         if self.model is None:
             self.model = TorchRNN(self.layer_units, self.activation, recurrent_hidden = recurrent_hidden)
             
-        self.learning_rate_init = 0.1  
+        self.learning_rate_init = 0.001  
         self.alpha = 0.0000  
-        self.max_iter = 10
+        self.max_iter = 100
         X_add, I_add = self.sampleXIdata(T,X_,self.tree_approx_data_size)    
         criterion = nn.BCELoss()
         self.mixed_mode = True
@@ -170,8 +170,8 @@ class BiasedRecurrentClassifier:
         
         self.alpha = 0.0001 
         #self.layer_units = [n_features] + list(self.hidden_layer_sizes) + [self.n_outputs_]
-        self.learning_rate_init = 0.0001
-        self.max_iter = 10
+        self.learning_rate_init = 0.00001
+        self.max_iter = 100
         criterion = nn.BCEWithLogitsLoss()
         self.mixed_mode = False
         self._fit(torch.from_numpy(X), torch.from_numpy(y), criterion, fit_mask = list(range(recurrent_hidden - 1, self.n_layers - 1)),bias = bias, par_lr = par_lr)
@@ -200,8 +200,8 @@ class BiasedRecurrentClassifier:
         last = len(activations) - 2
 
         for t in range(X.shape[1] - 1, -1, -1):
-            eps = np.finfo(activations[last][:,t].dtype).eps
-            y_prob = logistic_sigmoid(activations[last][:,t])
+            eps = np.finfo(activations[last + 1][:,t].dtype).eps
+            y_prob = logistic_sigmoid(activations[last + 1][:,t])
             y_prob = np.clip(y_prob, eps, 1 - eps)
 
                     
@@ -284,19 +284,25 @@ class BiasedRecurrentClassifier:
     
     def predict_proba(self, X, check_input=True, get_non_activated = False, bias=None,par_lr = 1.0):
         with torch.no_grad():
-            hidden_state = self.model.init_hidden()
+            hidden_state = self.model.init_hidden(batch=X.shape[0])
             output = []
             activations = [X]
             if bias is not None:
                 bias = torch.from_numpy(bias)     
             for t in range(X.shape[1]):
                 if self.mixed_mode:
-                    out, hidden = self.model(X[:,t], None, bias[:,t], par_lr)
+                    out, hidden = self.model(torch.from_numpy(X[:,t]), None,None, bias[:,t], par_lr)
                 else:    
-                    out, hidden = self.model(X[:,t], hidden_state, bias[:,t], par_lr)
-                    hidden_state = hidden[self.model.recurrent_hidden]
+                    out, hidden = self.model(torch.from_numpy(X[:,t]), hidden_state, None,bias[:,t], par_lr)
+                    hidden_state = hidden[self.model.recurrent_hidden - 1]
                 output.append(out)
-                activations.append(hidden.numpy())
+                for i in range(1,len(hidden) + 1):
+                    if len(activations) < i + 1:
+                        activations.append([])    
+                    activations[i].append(hidden[i - 1].detach().numpy())
+
+            for i in range(1,len(activations)):
+                activations[i] = np.swapaxes(np.asarray(activations[i]),0,1)  
         return np.hstack(output).reshape(X.shape[0],X.shape[1]), activations        
                 
                 

@@ -181,12 +181,12 @@ class MixedModel:
                         if encoded_classes[j] != encoded_classes_[j]:
                             printf("Fail: ", "(", int(j / y_.shape[1]),int(j % y_.shape[1]), ")", encoded_classes[j], encoded_classes_[j])
                             
-                            printf("X mixed: ", X[k,int(j % y_.shape[1])])
-                            if int(j % y_.shape[1]) == 0:
-                                printf("X_nn: ", np.zeros((self.network.hidden_layer_sizes[2],)),act[0][k,int(j % y_.shape[1])])
-                            else:    
-                                printf("X_nn: ", act[self.network.recurrent_hidden][k,int(j % y_.shape[1]) - 1],act[0][k,int(j % y_.shape[1])])
-                            printf(act[self.network.recurrent_hidden - 1].reshape(-1,self.network.hidden_layer_sizes[1])[j],I[j])
+                            # printf("X mixed: ", X[k,int(j % y_.shape[1])])
+                            # if int(j % y_.shape[1]) == 0:
+                            #     printf("X_nn: ", np.zeros((self.network.hidden_layer_sizes[2],)),act[0][k,int(j % y_.shape[1])])
+                            # else:    
+                            #     printf("X_nn: ", act[self.network.recurrent_hidden][k,int(j % y_.shape[1]) - 1],act[0][k,int(j % y_.shape[1])])
+                            # printf(act[self.network.recurrent_hidden - 1].reshape(-1,self.network.hidden_layer_sizes[1])[j],I[j])
                             #mask1 = list(range(self.network.recurrent_hidden - 1))
                             
                             #dir_name = str(k) + "_" + str(int(j % y_.shape[1])) + "_" + str(i) + "_" + str(depth)
@@ -205,13 +205,13 @@ class MixedModel:
                         else:
                             printf("OK: ", "(" ,int(j / y_.shape[1]),int(j % y_.shape[1]),")",encoded_classes[j], encoded_classes_[j])
                             
-                            printf("X mixed: ", X[k,int(j % y_.shape[1])])
-                            if int(j % y_.shape[1]) == 0:
-                                printf("X_nn: ", np.zeros((self.network.hidden_layer_sizes[2],)),act[0][k,int(j % y_.shape[1])])
-                            else:
-                                printf("X_nn: ", act[self.network.recurrent_hidden][k,int(j % y_.shape[1]) - 1],act[0][k,int(j % y_.shape[1])])
+                            # printf("X mixed: ", X[k,int(j % y_.shape[1])])
+                            # if int(j % y_.shape[1]) == 0:
+                            #     printf("X_nn: ", np.zeros((self.network.hidden_layer_sizes[2],)),act[0][k,int(j % y_.shape[1])])
+                            # else:
+                            #     printf("X_nn: ", act[self.network.recurrent_hidden][k,int(j % y_.shape[1]) - 1],act[0][k,int(j % y_.shape[1])])
                                                                 
-                            printf(act[self.network.recurrent_hidden - 1].reshape(-1,self.network.hidden_layer_sizes[1])[j],I[j])
+                            # printf(act[self.network.recurrent_hidden - 1].reshape(-1,self.network.hidden_layer_sizes[1])[j],I[j])
                                     
              
         self.network = mm
@@ -219,7 +219,7 @@ class MixedModel:
         
     def predict_proba(self, X, bias, returnI = False, learning_rate = 1.0):
         res = np.zeros((X.shape[0],X.shape[1]))
-        hidden = np.zeros((X.shape[0],X.shape[1],self.network.coefs_[0].shape[1]))
+        hidden = np.zeros((X.shape[0],X.shape[1],self.network.get_coefs_(0).shape[1]))
         I_list = []
         X_augs = []
         for t in range(X.shape[1]):
@@ -233,11 +233,11 @@ class MixedModel:
             I_list.append(I)
             I = np.swapaxes(np.asarray(I_list),0,1)
             res[:,:t+1], act = self.network.predict_proba(I,  bias = bias, par_lr = learning_rate)
-            hidden[:,:t+1] = act[self.network.recurrent_hidden]
+            hidden[:,:t+1] = act[self.network.model.recurrent_hidden]
 
-        printf("Mixed prediction result sample: ", res[0][:5]) 
-        printf("With bias: ", bias[0][1][:5])
-        printf("With X_augs: ", X_aug[0])
+        # printf("Mixed prediction result sample: ", res[0][:5]) 
+        # printf("With bias: ", bias[0][1][:5])
+        # printf("With X_augs: ", X_aug[0])
         
         if returnI:
             return res, hidden, I, np.swapaxes(np.asarray(X_augs),0,1)
