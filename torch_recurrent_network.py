@@ -159,6 +159,7 @@ class BiasedRecurrentClassifier:
         
         if self.model is None:
             self.model = TorchRNN(self.layer_units, self.activation, recurrent_hidden = recurrent_hidden)
+            self.model.to(device=self.device)
             
         self.learning_rate_init = 0.001  
         self.alpha = 0.0000  
@@ -166,7 +167,7 @@ class BiasedRecurrentClassifier:
         X_add, I_add = self.sampleXIdata(T,X_,self.tree_approx_data_size)    
         criterion = nn.BCELoss()
         self.mixed_mode = True
-        self._fit(torch.from_numpy(np.vstack([X_,X_add])), torch.from_numpy(np.vstack([I,I_add])), criterion, fit_mask = mask1, predict_mask = mask1)  
+        self._fit(torch.from_numpy(np.vstack([X_,X_add])).to(device=self.device), torch.from_numpy(np.vstack([I,I_add])).to(device=self.device), criterion, fit_mask = mask1, predict_mask = mask1)  
         
         self.alpha = 0.0001 
         #self.layer_units = [n_features] + list(self.hidden_layer_sizes) + [self.n_outputs_]
@@ -174,7 +175,7 @@ class BiasedRecurrentClassifier:
         self.max_iter = 100
         criterion = nn.BCEWithLogitsLoss()
         self.mixed_mode = False
-        self._fit(torch.from_numpy(X), torch.from_numpy(y), criterion, fit_mask = list(range(recurrent_hidden - 1, self.n_layers - 1)),bias = bias, par_lr = par_lr)
+        self._fit(torch.from_numpy(X).to(device=self.device), torch.from_numpy(y).to(device=self.device), criterion, fit_mask = list(range(recurrent_hidden - 1, self.n_layers - 1)),bias = bias, par_lr = par_lr)
         
         deltas = []
         for _ in range(len(self.layer_units)):
@@ -187,12 +188,12 @@ class BiasedRecurrentClassifier:
                 
         activations = [X]
         for t in range(X.shape[1]):
-            out, hidden = self.model(torch.from_numpy(X[:,t]), hidden_state, None,torch.from_numpy(bias[:,t]),par_lr)
+            out, hidden = self.model(torch.from_numpy(X[:,t]).to(device=self.device), hidden_state, None,torch.from_numpy(bias[:,t]).to(device=self.device),par_lr)
             hidden_state = hidden[self.model.recurrent_hidden - 1]
             for i in range(1,len(hidden) + 1):
                 if len(activations) < i + 1:
                     activations.append([])    
-                activations[i].append(hidden[i - 1].detach().numpy())
+                activations[i].append(hidden[i - 1].detach().to(torch.device('cpu')).numpy())
 
         for i in range(1,len(activations)):
             activations[i] = np.swapaxes(np.asarray(activations[i]),0,1)        
@@ -247,7 +248,7 @@ class BiasedRecurrentClassifier:
                 y_batch = y[batch_idxs]
                 
                 if bias is not None:
-                    bias_batch = torch.from_numpy(bias[batch_idxs])
+                    bias_batch = torch.from_numpy(bias[batch_idxs]).to(self.device)
                 else:
                     bias_batch = None
                          
@@ -266,7 +267,7 @@ class BiasedRecurrentClassifier:
             
                 loss = criterion(torch.hstack(output).flatten(), y_batch.flatten())
                 eloss += loss.item()
-                encoded_classes_ = np.asarray(torch.hstack(output).flatten().detach().numpy() >= 0.5, dtype=int)
+                encoded_classes_ = np.asarray(torch.hstack(output).flatten().detach().to(torch.device('cpu')).numpy() >= 0.5, dtype=int)
                 acc = accuracy_score(encoded_classes_,y_batch.flatten().detach().numpy())  
                 eacc += acc              
                 optimizer.zero_grad()
@@ -288,18 +289,18 @@ class BiasedRecurrentClassifier:
             output = []
             activations = [X]
             if bias is not None:
-                bias = torch.from_numpy(bias)     
+                bias = torch.from_numpy(bias).to(self.device)     
             for t in range(X.shape[1]):
                 if self.mixed_mode:
-                    out, hidden = self.model(torch.from_numpy(X[:,t]), None,None, bias[:,t], par_lr)
+                    out, hidden = self.model(torch.from_numpy(X[:,t]).to(self.device), None,None, bias[:,t], par_lr)
                 else:    
-                    out, hidden = self.model(torch.from_numpy(X[:,t]), hidden_state, None,bias[:,t], par_lr)
+                    out, hidden = self.model(torch.from_numpy(X[:,t]).to(self.device), hidden_state, None,bias[:,t], par_lr)
                     hidden_state = hidden[self.model.recurrent_hidden - 1]
-                output.append(out)
+                output.append(out.detach().to(torch.device('cpu')).numpy())
                 for i in range(1,len(hidden) + 1):
                     if len(activations) < i + 1:
                         activations.append([])    
-                    activations[i].append(hidden[i - 1].detach().numpy())
+                    activations[i].append(hidden[i - 1].detach().to(torch.device('cpu')).numpy())
 
             for i in range(1,len(activations)):
                 activations[i] = np.swapaxes(np.asarray(activations[i]),0,1)  

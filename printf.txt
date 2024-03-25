@@ -172,3 +172,23 @@ Mixed score 2:  0.5368303571428571
 Outer loop iter:  2 
 Global step:  0 
 Outer loop iter:  0 
+Global step:  0 
+Outer loop iter:  0 
+Global step:  0 
+Outer loop iter:  0 
+Mixed score:  0.4564732142857143 
+Mixed loss:  0.7194119420449703 
+Mixed score 2:  0.4564732142857143 
+Outer loop iter:  1 
+Mixed score:  0.4564732142857143 
+Mixed loss:  0.7194119420449703 
+Mixed score 2:  0.4564732142857143 
+Outer loop iter:  2 
+Mixed score:  0.4564732142857143 
+Mixed loss:  0.7194119420449703 
+Mixed score 2:  0.4564732142857143 
+Outer loop iter:  3 
+Mixed score:  0.4564732142857143 
+Mixed loss:  0.7194119420449703 
+Mixed score 2:  0.4564732142857143 
+Outer loop iter:  4 
